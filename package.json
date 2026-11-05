@@ -1,0 +1,15 @@
+{
+  "name": "ainative-cli",
+  "version": "0.1.0",
+  "description": "OperationAINative 平台 CLI——平台控制台能做的一切，命令行都能做；也是 MCP Server 的同一套内核",
+  "type": "module",
+  "bin": {
+    "ainative": "bin/ainative.mjs",
+    "ainative-mcp": "bin/ainative-mcp.mjs"
+  },
+  "files": ["bin/", "src/", "docs/", "README.md"],
+  "engines": { "node": ">=18" },
+  "keywords": ["mcp", "agent", "cli", "operationainative"],
+  "license": "UNLICENSED",
+  "private": false
+}

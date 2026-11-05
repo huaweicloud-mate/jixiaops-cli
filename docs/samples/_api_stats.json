@@ -1,0 +1,2 @@
+// GET /api/stats -> 200
+{"line-local": {"open": 0, "total": 2, "spent_yuan": 0.0, "pending_gates": 1}, "line-1": {"open": 1, "total": 1, "spent_yuan": 0.0, "pending_gates": 0}}

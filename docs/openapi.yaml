@@ -1,0 +1,276 @@
+# OperationAINative 平台 API 规格（手写 + 契约测试防漂移，架构文档 D1）
+# 版本联动规则（D7）：本文件 version 变更必须同步 package.json / npm 发布版本。
+openapi: 3.1.0
+info:
+  title: OperationAINative Platform API
+  version: 0.3.0
+  description: |
+    双后端：console（ops-web.py，:8081，工作单/闸口/令牌/产物）与 gw（ai-native-serve，
+    :8080，节点编排/派发/WS）。鉴权：`Authorization: Bearer <token>`（gw 兼容 `?token=` query）。
+    访客身份由 /api/auth/guest 自动签发（有频控，客户端必须缓存会话）。
+    写操作约定：CLI/MCP 层默认 dry-run，显式 confirm 才执行（D4）；人类闸口平台侧不加锁，
+    由编排器状态机保证停在人前——工具层不得代拍。
+servers:
+  - url: http://127.0.0.1:8081
+    name: console
+  - url: http://127.0.0.1:8080
+    name: gw
+tags:
+  - name: auth
+  - name: workorder
+  - name: readonly
+  - name: token
+  - name: halt
+  - name: gw
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+  schemas:
+    Identity:
+      type: object
+      properties:
+        admin: { type: boolean }
+        user: { type: string }
+        kind: { type: string, enum: [guest, gitcode, admin] }
+        avatar: { type: string }
+        lines: { type: [array, "null"], items: { type: string } }
+        ro: { type: boolean }
+    Workorder:
+      type: object
+      required: [id, topic, status, line]
+      properties:
+        id: { type: string, pattern: "^wo-\\d{8}-\\d{3}$" }
+        topic: { type: string }
+        line: { type: string }
+        status:
+          type: string
+          enum: [new, topic_pending_human, storyboard, producing, assembling,
+                 review, publish_pending_human, scheduled, published, closed, blocked]
+        platforms: { type: array, items: { type: string } }
+        protocol: { type: string, enum: [v1, v2] }
+        gates: { type: object, additionalProperties: { type: string } }
+        gate_comments: { type: object, additionalProperties: { type: string } }
+        gate_files: { type: object }   # 三形状（issue#21）：字符串/数组/对象，消费方须兼容
+        agents: { type: object }       # 各工位执行记录投影
+        artifacts: { type: array, items: { type: string } }
+        updated_at: { type: string }
+security: [{ bearer: [] }]
+paths:
+  # ---------------- 认证 ----------------
+  /api/me:
+    get:
+      tags: [auth]
+      summary: 当前身份与权限
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Identity" } } } }
+        "401": { description: 令牌失效 }
+  /api/auth/guest:
+    get:
+      tags: [auth]
+      summary: 访客自动登录（有频控 429，客户端必须缓存）
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Identity" } } } }
+        "429": { description: 频控 }
+  /api/auth/{provider}:
+    get:
+      tags: [auth]
+      summary: OAuth 登录入口（gitcode）；回调地址需运维配置
+      parameters: [{ name: provider, in: path, required: true, schema: { type: string } }]
+      responses: { "302": { description: 跳转授权页 } }
+  # ---------------- 工作单 ----------------
+  /api/lines:
+    get:
+      tags: [workorder]
+      summary: 工作单全量列表（含 agents/artifacts/gates 投影；产线状态内嵌于单据 line 字段）
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Workorder" } } } }
+  /api/wo/{id}:
+    get:
+      tags: [workorder]
+      summary: 单张工作单详情
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Workorder" } } } }
+        "404": { description: 不存在 }
+  /api/new:
+    post:
+      tags: [workorder]
+      summary: 创建工作单（产线独占：同产线在产单冲突 → 409 附空闲产线）
+      x-ainative-write: true
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [topic], properties:
+            { topic: { type: string }, line: { type: string }, platforms: { type: string } } } } }
+      responses:
+        "200": { description: OK（返回 id/url） }
+        "409": { description: 产线占用 }
+  /api/brief:
+    post:
+      tags: [workorder]
+      summary: 上传总纲 markdown（裸 text/plain body；上传即拍板，快进分镜）
+      x-ainative-write: true
+      parameters: [{ name: wo, in: query, required: true, schema: { type: string } }]
+      requestBody: { content: { text/plain: { schema: { type: string } } } }
+      responses: { "200": { description: OK }, "404": { description: 工作单不存在 } }
+  /api/upload:
+    post:
+      tags: [workorder]
+      summary: 上传产物（裸二进制 body；文件名限 \\w.- 与子目录；200MB 上限；closed 单 409）
+      x-ainative-write: true
+      parameters:
+        - { name: wo, in: query, required: true, schema: { type: string } }
+        - { name: file, in: query, required: true, schema: { type: string } }
+        - { name: step, in: query, schema: { type: string }, description: "protocol v2 显式工位" }
+      requestBody: { content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { "200": { description: OK }, "400": { description: 名非法/超限 }, "409": { description: 单已 closed } }
+  /api/gate:
+    post:
+      tags: [workorder]
+      summary: 闸口拍板（value 仅 approved/rejected；闸口 locked 时 409）
+      x-ainative-write: true
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [gate, value, id], properties:
+            { gate: { type: string }, value: { type: string, enum: [approved, rejected] },
+              id: { type: string }, comment: { type: string } } } } }
+      responses: { "200": { description: OK }, "409": { description: 闸口 locked } }
+  /api/pick:
+    post:
+      tags: [workorder]
+      summary: 候选选择（"选 N" 走这里）
+      x-ainative-write: true
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [step, option], properties:
+            { step: { type: string }, wo: { type: string }, option: { type: string }, input: { type: string } } } } }
+      responses: { "200": { description: OK } }
+  /api/skip:
+    post:
+      tags: [workorder]
+      summary: 跳过工位（仅 tts/subtitle/adapt 可跳，其余 400）
+      x-ainative-write: true
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [step, wo], properties:
+            { step: { type: string }, wo: { type: string }, skipped: { type: boolean }, note: { type: string } } } } }
+      responses: { "200": { description: OK }, "400": { description: 必需环节不可跳 } }
+  /api/start:
+    post:
+      tags: [workorder]
+      summary: 派发工作单（同步等网关回执；节点离线 502 附接入指引）
+      x-ainative-write: true
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [wo], properties: { wo: { type: string }, mode: { type: string } } } } }
+      responses:
+        "200": { description: 派发回执 }
+        "502": { description: 节点离线 }
+        "504": { description: 派发超时 }
+  /api/bind-agent:
+    post:
+      tags: [workorder]
+      summary: 产线绑定节点（line 维度）
+      x-ainative-write: true
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [line, agent], properties: { line: { type: string }, agent: { type: string } } } } }
+      responses: { "200": { description: OK } }
+  /api/wo-close:
+    post:
+      tags: [workorder]
+      summary: 关闭工作单（成品档案只读；仅 new/终态/总刹车在途可完结，其余 409）
+      x-ainative-write: true
+      x-ainative-min-identity: admin
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [id], properties: { id: { type: string }, reason: { type: string } } } } }
+      responses: { "200": { description: OK }, "409": { description: 状态不允许 } }
+  # ---------------- 只读 ----------------
+  /api/stats:
+    get: { tags: [readonly], summary: 汇总统计, responses: { "200": { description: OK } } }
+  /api/spec:
+    get: { tags: [readonly], summary: 平台自描述规格, responses: { "200": { description: OK } } }
+  /api/agents:
+    get: { tags: [readonly], summary: 网关节点实况 {agents,busy,hosts}, responses: { "200": { description: OK } } }
+  /api/agent-logs:
+    get: { tags: [readonly], summary: 节点日志, responses: { "200": { description: OK } } }
+  /api/devices:
+    get: { tags: [readonly], summary: 设备接入清单, responses: { "200": { description: OK } } }
+  /api/chat-allowed:
+    get: { tags: [readonly], summary: chat 权限预检, responses: { "200": { description: OK } } }
+  # ---------------- 令牌（高危） ----------------
+  /api/tokens:
+    get: { tags: [token], summary: 令牌列表（管理员）, responses: { "200": { description: OK }, "503": { description: DB 关闭 } } }
+  /api/token-issue:
+    post:
+      tags: [token]
+      summary: 签发产线令牌
+      x-ainative-write: true
+      x-ainative-min-identity: admin
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [user_name, line_ids], properties:
+            { user_name: { type: string }, line_ids: { type: array, items: { type: string } } } } } }
+      responses: { "200": { description: OK（唯一一次明文令牌） }, "403": { description: 权限不足 } }
+  /api/token-revoke:
+    post:
+      tags: [token]
+      summary: 吊销令牌
+      x-ainative-write: true
+      x-ainative-min-identity: admin
+      requestBody:
+        content: { application/json: { schema:
+          { type: object, required: [token_hash], properties: { token_hash: { type: string } } } } }
+      responses: { "200": { description: OK } }
+  # ---------------- 总闸 ----------------
+  /api/h:
+    post: { tags: [halt], summary: 总刹车（拒绝推进全部工作单）, x-ainative-write: true, responses: { "200": { description: OK } } }
+  /api/resume:
+    post: { tags: [halt], summary: 解除总刹车, x-ainative-write: true, responses: { "200": { description: OK } } }
+  # ---------------- gw（ai-native-serve） ----------------
+  /health:
+    get:
+      tags: [gw]
+      summary: 健康与节点在线表
+      servers: [{ url: http://127.0.0.1:8080, name: gw }]
+      responses: { "200": { description: "{ok, ts, nodes:{agent_id:bool}}" } }
+  /api/nodes:
+    get:
+      tags: [gw]
+      summary: 节点快照全集
+      servers: [{ url: http://127.0.0.1:8080, name: gw }]
+      responses: { "200": { description: OK } }
+  /api/dispatch:
+    post:
+      tags: [gw]
+      summary: 同步派发（body 必含 prompt；信封 v2 透传 wo/protocol/tools/artifact_dir/verify_url；1min 超时）
+      servers: [{ url: http://127.0.0.1:8080, name: gw }]
+      parameters: [{ name: agent, in: query, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, required: [prompt] } } } }
+      responses:
+        "200": { description: dispatch_result }
+        "400": { description: 缺 prompt }
+        "502": { description: 节点离线 }
+        "504": { description: 超时 }
+  /ws/chat/{agent_id}:
+    get:
+      tags: [gw]
+      summary: chat WS 通道（信封协议见 asyncapi.yaml；ops-web :8081 同路径为代理）
+      servers: [{ url: http://127.0.0.1:8080, name: gw }]
+      parameters:
+        - { name: agent_id, in: path, required: true, schema: { type: string } }
+        - { name: token, in: query, schema: { type: string } }
+        - { name: resume_sid, in: query, schema: { type: string }, description: 续接历史会话 }
+      responses: { "101": { description: 升级为 WS }, "401": { description: 需要令牌 } }
+  /ws/node/{agent_id}:
+    get:
+      tags: [gw]
+      summary: worker 接入通道（节点出站连入）
+      servers: [{ url: http://127.0.0.1:8080, name: gw }]
+      parameters:
+        - { name: agent_id, in: path, required: true, schema: { type: string } }
+        - { name: token, in: query, schema: { type: string } }
+      responses: { "101": { description: 升级为 WS } }

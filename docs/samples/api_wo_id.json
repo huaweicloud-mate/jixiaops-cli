@@ -1,0 +1,2 @@
+// GET /api/wo/{id} -> 200
+{"id": "wo-20261103-005", "line": "line-1", "owner": "", "topic": "123", "status": "new", "platforms": ["bilibili"], "protocol": "v2", "agents": {}, "gates": {"topic": "locked", "hook": "locked", "title": "locked", "publish": "locked"}, "gate_comments": {}, "created_at": "2026-11-03T12:49:52Z", "updated_at": "2026-11-03T12:49:52Z", "evidence": {"subtitle": false}, "artifacts": []}

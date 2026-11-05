@@ -291,11 +291,19 @@ MCP 接入配置见架构文档附录 A。
 
 ---
 
-## 9. 待定项清单（随 P0/P1 关闭）
+## 9. 待定项清单（P0/P1 已全部关闭 · 2026-11-05 实测）
 
-| 项 | 状态 | 关闭条件 |
+| 项 | 状态 | 实测结论 |
 |---|---|---|
-| `gw` 组精确路径与参数 | 待定 | P0 网关 API 盘点完成 |
-| `wo` 列表命令形态（overview vs 独立 list） | 待定 | P1 openapi.yaml 锁定响应模型 |
-| GitCode OAuth 本地回调端口 | 待定 | P2 实测（平台已注册 127.0.0.1:8091，CLI 拟用随机端口 + 应用后台补充注册） |
-| 闸口操作的精确参数名 | 待定 | P1 spec + /api/spec 端点协商 |
+| `gw` 组精确路径与参数 | ✅ 关闭 | `/health` `/api/nodes` `/api/dispatch?agent=`（同步 1min）+ WS `/ws/node/{id}` `/ws/chat/{id}`；auth `?token=` 或 Bearer |
+| `wo` 列表命令形态 | ✅ 关闭 | `/api/lines` 即工作单全量列表（数组）；`/api/overview` 不存在（是 HTML 页面路由） |
+| GitCode OAuth 本地回调端口 | ✅ 关闭 | v1 砍 OAuth（访客默认 + 令牌注入已覆盖）；平台侧 OAuth 仅关系控制台登录 |
+| 闸口操作的精确参数名 | ✅ 关闭 | `/api/gate` form: `gate,value(approved/rejected),id,comment`；候选"选 N"走 `/api/pick` (step,wo,option,input)；闸口 locked 时拍板 409 |
+| 跳过工位范围 | ✅ 关闭 | 仅 `tts`/`subtitle`/`adapt` 可跳，其余 400 |
+| 关闭单条件 | ✅ 关闭 | 仅 `new`（放弃）/终态/总刹车在途可完结，其余 409；关闭后成品档案只读 |
+
+## 10. 规格文件
+
+- `docs/openapi.yaml` — console + gw 双后端全端点（3.1，含 x-ainative-write / x-ainative-min-identity 扩展）
+- `docs/asyncapi.yaml` — chat WS 信封协议（ready/prompt/acp/error/pong/cancel/ping）
+- 契约测试（schemathesis 对本地 8091 靶场）为 P5 项

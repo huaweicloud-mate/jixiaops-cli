@@ -1,6 +1,6 @@
 {
   "name": "ainative-cli",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "OperationAINative 平台 CLI——平台控制台能做的一切，命令行都能做；也是 MCP Server 的同一套内核",
   "type": "module",
   "bin": {

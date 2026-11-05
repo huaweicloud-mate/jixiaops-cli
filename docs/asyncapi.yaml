@@ -1,0 +1,69 @@
+# WS chat 通道信封规格（架构文档 D5 / §5.2.1；P0 源码实测 ai-native-serve main.go chatLoop）
+asyncapi: 2.6.0
+info:
+  title: OperationAINative Chat WS
+  version: 0.3.0
+  description: |
+    端点：`/ws/chat/{agent_id}?token=<t>&resume_sid=<sid>`（gw :8080 直连；ops-web :8081 同路径代理）。
+    连接建立后服务端自动完成 acp_open → initialize → session/new（或 resume_sid 时 session/load），
+    全程最长 90s，就绪后下发第一帧 `ready`。sid 持久化于 agent 侧 opencode 库，任意时长可 resume。
+channels:
+  /ws/chat/{agent_id}:
+    parameters:
+      agent_id:
+        schema: { type: string }
+        description: 目标节点 agent_id（离线时服务端立即下发 error 帧并关闭）
+      token:
+        schema: { type: string }
+        description: 令牌（query 或 Bearer 均可）
+      resume_sid:
+        schema: { type: string }
+        description: 可选；续接历史会话
+    subscribe:
+      summary: 服务端 → 客户端
+      message:
+        oneOf:
+          - name: ready
+            payload:
+              type: object
+              required: [ch, chat_id, sid]
+              properties:
+                ch: { const: ready }
+                chat_id: { type: string }
+                sid: { type: string, description: 会话 id——保存它即可随时 resume }
+                resumed: { type: boolean }
+          - name: acp 更新流
+            payload:
+              type: object
+              description: ACP session/update 转发（文本增量/工具调用/思考等，原样透传）
+          - name: error
+            payload:
+              type: object
+              properties:
+                ch: { const: error }
+                err: { type: string }
+          - name: pong
+            payload: { type: object, properties: { ch: { const: pong } } }
+    publish:
+      summary: 客户端 → 服务端
+      message:
+        oneOf:
+          - name: prompt
+            payload:
+              type: object
+              required: [ch, text]
+              properties:
+                ch: { const: prompt }
+                text: { type: string }
+          - name: acp 回执
+            payload:
+              type: object
+              properties:
+                ch: { const: acp }
+                msg: { type: object, description: ACP session/response（权限请求应答等） }
+          - name: cancel
+            payload: { type: object, properties: { ch: { const: cancel } } }
+          - name: ping
+            payload: { type: object, properties: { ch: { const: ping } }, description: 应用级心跳，回 pong }
+tags:
+  - name: chat

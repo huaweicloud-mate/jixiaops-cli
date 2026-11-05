@@ -1,0 +1,2 @@
+// GET /api/tokens -> 503
+{"error":"DB 未启用——令牌管理需要 MySQL（users.json 降级模式请手工编辑文件）"}

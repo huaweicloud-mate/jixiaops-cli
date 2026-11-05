@@ -1,0 +1,2 @@
+// GET /api/chat-allowed -> 200
+{"agent": "", "allowed": false, "lines": null}

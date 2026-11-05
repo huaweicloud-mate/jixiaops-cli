@@ -1,0 +1,2 @@
+// GET /api/me -> 200
+{"admin": true, "user": null, "kind": null, "avatar": null, "lines": null, "ro": false}

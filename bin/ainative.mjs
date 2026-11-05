@@ -46,7 +46,8 @@ const HELP = `ainative v0.3.0 —— OperationAINative 平台 CLI
 总闸:
   console halt [--confirm] | console resume
 WS 会话代理（chat 全双工，D5）:
-  console ws open --agent <agent_id> [--resume <sid>]
+  console ws chat --agent <id> --text <t> [--resume <sid>]   一次性对话（开→发→等回合结束→关）
+  console ws open --agent <agent_id> [--resume <sid>]        （MCP 常驻宿主用；CLI 单命令进程会话不跨进程）
   console ws send <session> --text <t>
   console ws read <session>               排空收件缓冲
   console ws wait <session> [--timeout 10000]
@@ -195,6 +196,27 @@ async function main() {
   // ---------- WS 会话代理 ----------
   if (g === "console" && c === "ws") {
     const sub = rest[0], sid = rest[1];
+    if (sub === "chat") {
+      need(opt.agent && opt.text, "用法: ws chat --agent <id> --text <t> [--resume <sid>]");
+      const o = await wsOpen({ agent: opt.agent, resume: opt.resume, verbose: true });
+      if (!o.chat_id) { out({ ...o, hint: o.hint || "会话未就绪" }); return; }
+      await wsSend(o.session, opt.text);
+      // 等回合结束：ACP turn 结束标志 = 收到含 stopReason 的 jsonrpc result 帧
+      const deadline = Date.now() + 120000;
+      const frames = [];
+      while (Date.now() < deadline) {
+        const r = await wsWait(o.session, 15000);
+        if (r.error || r.timeout) break;
+        frames.push(...r.frames);
+        if (frames.some(f => f.result?.stopReason || f.ch === "stop")) break;
+      }
+      const texts = frames
+        .flatMap(f => [f.msg?.update?.sessionUpdate === "agent_message_chunk" ? f.msg.update.content?.text : null,
+                       f.ch === "prompt_reply" ? f.text : null].filter(Boolean));
+      out({ session: o.session, sid: o.sid, replies: texts.length ? texts : frames.slice(-5), frames_total: frames.length });
+      await wsClose(o.session);
+      return;
+    }
     if (sub === "open") {
       need(opt.agent, "用法: ws open --agent <agent_id> [--resume <sid>]");
       out(await wsOpen({ agent: opt.agent, resume: opt.resume, verbose: opt.verbose }));

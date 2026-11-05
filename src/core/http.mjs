@@ -1,7 +1,7 @@
 // core/http.mjs —— HTTP 封装：JSON 输出 / 错误语义化 / 退出码映射 / 裸 body（upload/brief）
 import { resolveIdentity, defaultEndpoint, mask } from "./auth.mjs";
 
-async function _req(method, p, { body, rawBody, contentType } = {}) {
+async function _req(method, p, { body, rawBody, contentType, _retried = false } = {}) {
   const ep = defaultEndpoint();
   const id = await resolveIdentity(ep);
   const headers = { "Authorization": "Bearer " + id.token };
@@ -10,6 +10,12 @@ async function _req(method, p, { body, rawBody, contentType } = {}) {
   const r = await fetch(ep + p, { method, headers, body: rawBody ?? (body ? JSON.stringify(body) : undefined) });
   const text = await r.text();
   let j = null; try { j = JSON.parse(text); } catch { /* 非 JSON（404 桩等） */ }
+  if (r.status === 401 && !_retried && id.source.startsWith("cache:")) {
+    // 缓存会话失效（服务端重启/内存会话清空）——清缓存重解析一次（访客会自动重登）
+    const { logout } = await import("./auth.mjs");
+    logout();
+    return _req(method, p, { body, rawBody, contentType, _retried: true });
+  }
   if (!r.ok) {
     const e = new Error(j?.error || text.slice(0, 160) || `HTTP ${r.status}`);
     e.http = r.status;

@@ -35,19 +35,28 @@ function push(s, frame) {
 }
 function drain(s) { return s.buffer.splice(0).map(x => x.frame); }
 
-async function connect(s, verbose) {
+async function connect(s, verbose, retried = false) {
   const base = epWs(process.env.AINATIVE_ENDPOINT);
-  const { resolveIdentity } = await import("./auth.mjs");
+  const { resolveIdentity, logout } = await import("./auth.mjs");
   const id = await resolveIdentity(process.env.AINATIVE_ENDPOINT);
   const url = `${base}/ws/chat/${encodeURIComponent(s.agent)}?token=${encodeURIComponent(id.token)}` +
     (s.sid ? `&resume_sid=${encodeURIComponent(s.sid)}` : "");
   const ws = new WebSocket(url);
   s.ws = ws; s.state = "connecting";
-  await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error("WS 握手超时")), 15000);
-    ws.onopen = () => { clearTimeout(t); resolve(); };
-    ws.onerror = (e) => { clearTimeout(t); reject(new Error("WS 错误")); };
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("WS 握手超时")), 15000);
+      ws.onopen = () => { clearTimeout(t); resolve(); };
+      ws.onerror = (e) => { clearTimeout(t); reject(new Error("WS 错误")); };
+    });
+  } catch (e) {
+    // 缓存会话失效（服务端重启/内存会话清空）——同 http.mjs 的 401 自愈：清缓存重登一次
+    if (!retried && id.source.startsWith("cache:")) {
+      logout();
+      return connect(s, verbose, true);
+    }
+    throw e;
+  }
   s.state = "connected";
   // 信封协议（P0 实测）：ready → 捕获 sid/chat_id
   ws.onmessage = (ev) => {
@@ -57,23 +66,11 @@ async function connect(s, verbose) {
     push(s, f);
   };
   ws.onclose = () => { if (!s.closed) reconnectLoop(s, verbose); };
-  // 应用级看门狗（协议 ch=ping → pong；serve 侧另有 WS 层 keepalive）
-  s.watchdog = setInterval(() => {
-    if (ws.readyState === 1) {
-      ws.send(JSON.stringify({ ch: "ping" }));
-      const sent = Date.now();
-      s.pongCheck = setTimeout(() => {
-        if (s.state === "connected" && Date.now() - sent >= 9000) {
-          s.lastError = "pong 超时（10s）——主动重连";
-          try { ws.close(); } catch {}
-        }
-      }, 10000);
-    }
-  }, 20000);
+  // 心跳：serve 侧用 WS 协议层 ping（gorilla pingLoop），Node 端自动 pong——无需应用层心跳。
+  // （曾发 {ch:"ping"} 应用层信封，serve 不识别，看门狗误杀连接——已移除，见 gw 日志"未知信封"。）
 }
 
 async function reconnectLoop(s, verbose, max = 6) {
-  clearInterval(s.watchdog);
   s.state = "reconnecting";
   while (!s.closed && s.reconnects < max) {
     const delay = Math.min(30000, 1000 * 2 ** s.reconnects);
@@ -157,7 +154,6 @@ export function wsClose(sid) {
   const s = SESSIONS.get(sid);
   if (!s) return { error: "会话不存在" };
   s.closed = true; s.state = "closed";
-  clearInterval(s.watchdog);
   try { s.ws?.close(); } catch {}
   drain(s);                        // 丢弃未读帧（显式关闭语义）
   SESSIONS.delete(sid);

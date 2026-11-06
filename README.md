@@ -48,7 +48,31 @@ node dist/bin/jixiaops.js --help
 
 ## 各 Agent 接入 MCP
 
-`jixiaops-mcp` 是与 CLI 同一内核的 MCP Server（stdio，20 个工具）。
+`jixiaops-mcp` 是与 CLI 同一内核的 MCP Server（stdio，20 个工具）。各家 agent 一条命令接入：
+
+**Claude Code**：
+
+```bash
+claude mcp add jixiaops -- npx -y jixiaops mcp
+```
+
+**Cursor**：
+
+```bash
+cursor mcp add jixiaops -- npx -y jixiaops mcp
+```
+
+**Codex**：
+
+```bash
+codex mcp add jixiaops -- npx -y jixiaops mcp
+```
+
+**Gemini CLI**：
+
+```bash
+gemini mcp add jixiaops -- npx -y jixiaops mcp
+```
 
 **OpenCode**（`~/.config/opencode/opencode.jsonc`）：
 
@@ -63,7 +87,7 @@ node dist/bin/jixiaops.js --help
 }
 ```
 
-**Claude Code / Cursor**（通用 JSON 配置）：
+**其他 agent（通用 JSON 配置）**：
 
 ```json
 {
@@ -76,7 +100,7 @@ node dist/bin/jixiaops.js --help
 }
 ```
 
-**Codex / 其他 agent**：`npx -y jixiaops mcp` 即 MCP Server 入口（stdio，newline-delimited JSON-RPC 2.0）。
+需要管理员/指定身份时，给配置加 `env`：`"env": { "JIXIAOPS_TOKEN": "<令牌>" }`（可选，默认访客自动登录）。
 
 ## 命令总览
 

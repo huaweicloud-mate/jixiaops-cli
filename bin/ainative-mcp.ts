@@ -1,13 +1,35 @@
 #!/usr/bin/env node
-// bin/ainative-mcp.mjs —— MCP Server（stdio，newline-delimited JSON-RPC 2.0，零依赖）
+// bin/ainative-mcp.ts —— MCP Server（stdio，newline-delimited JSON-RPC 2.0，零依赖）
 // 工具集：CLI 同内核策展视图（架构文档 D2/§7）。写工具一律要求 confirm:true（D4）。
-import { api, apiRaw } from "../src/core/http.mjs";
-import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose, wsList } from "../src/core/wsproxy.mjs";
+import { api, apiRaw, type ApiObject } from "../src/core/http.ts";
+import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose, wsList } from "../src/core/wsproxy.ts";
+import type { Json } from "../src/core/types.ts";
 import fs from "node:fs";
 import readline from "node:readline";
 import process from "node:process";
 
-const TOOLS = [
+interface ToolDef {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  read?: boolean;
+  run: (a: Record<string, unknown>) => Promise<unknown>;
+}
+
+/** /api/lines 行投影（wire JSON，使用点收窄） */
+interface WoRow {
+  id?: string;
+  line?: string;
+  topic?: string;
+  status?: string;
+  gates?: unknown;
+  artifacts?: unknown[];
+  [k: string]: unknown;
+}
+
+const NEED_CONFIRM = { error: "这是写操作", hint: "调用时传 confirm:true 执行；建议先说明将产生的影响" };
+
+const TOOLS: ToolDef[] = [
   {
     name: "whoami",
     description: "查看当前平台身份与权限（访客/管理员/GitCode），判断可执行的操作范围",
@@ -22,7 +44,8 @@ const TOOLS = [
     read: true,
     run: async () => {
       const j = await api("GET", "/api/lines");
-      return (j.data ?? j).map(w => ({ id: w.id, line: w.line, topic: w.topic, status: w.status, gates: w.gates, artifacts: (w.artifacts || []).length }));
+      const rows = (Array.isArray(j.data) ? j.data : []) as WoRow[];
+      return rows.map((w) => ({ id: w.id, line: w.line, topic: w.topic, status: w.status, gates: w.gates, artifacts: (w.artifacts || []).length }));
     },
   },
   {
@@ -40,8 +63,8 @@ const TOOLS = [
       platforms: { type: "string", description: "逗号分隔，默认 bilibili" },
       confirm: { type: "boolean", description: "写操作确认" } }, required: ["topic"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      const body = { topic: a.topic, platforms: a.platforms || "bilibili" };
+      if (a.confirm !== true) return NEED_CONFIRM;
+      const body: Record<string, unknown> = { topic: a.topic, platforms: a.platforms || "bilibili" };
       if (a.line) body.line = a.line;
       return api("POST", "/api/new", { body });
     },
@@ -53,8 +76,8 @@ const TOOLS = [
       id: { type: "string" }, text: { type: "string", description: "总纲 markdown 全文" },
       confirm: { type: "boolean" } }, required: ["id", "text"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      return apiRaw("POST", `/api/brief?wo=${encodeURIComponent(a.id)}`, Buffer.from(a.text, "utf8"), "text/plain; charset=utf-8");
+      if (a.confirm !== true) return NEED_CONFIRM;
+      return apiRaw("POST", `/api/brief?wo=${encodeURIComponent(String(a.id))}`, Buffer.from(String(a.text), "utf8"), "text/plain; charset=utf-8");
     },
   },
   {
@@ -66,10 +89,11 @@ const TOOLS = [
       step: { type: "string", description: "工位（protocol v2）：topic/storyboard/video/assembling..." },
       confirm: { type: "boolean" } }, required: ["id", "file"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      const name = (a.as || a.file.split(/[\\/]/).pop()).replace(/\\/g, "/");
-      const qs = `wo=${encodeURIComponent(a.id)}&file=${encodeURIComponent(name)}${a.step ? `&step=${encodeURIComponent(a.step)}` : ""}`;
-      return apiRaw("POST", `/api/upload?${qs}`, fs.readFileSync(a.file), "application/octet-stream");
+      if (a.confirm !== true) return NEED_CONFIRM;
+      const name = (typeof a.as === "string" && a.as ? a.as : (String(a.file).split(/[\\/]/).pop() || "")).replace(/\\/g, "/");
+      const step = typeof a.step === "string" ? a.step : "";
+      const qs = `wo=${encodeURIComponent(String(a.id))}&file=${encodeURIComponent(name)}${step ? `&step=${encodeURIComponent(step)}` : ""}`;
+      return apiRaw("POST", `/api/upload?${qs}`, fs.readFileSync(String(a.file)), "application/octet-stream");
     },
   },
   {
@@ -84,14 +108,14 @@ const TOOLS = [
   },
   {
     name: "wo_gate_decide",
-    description: "对工作闸口拍板（value 只允许 approved/rejected；候选选择用 wo_skip 同级的 pick 流程。人类闸口由人工拍板，工具只代传达）",
+    description: "对工作闸口拍板（value 只允许 approved/rejected；候选选择用 wo_pick 同级的 pick 流程。人类闸口由人工拍板，工具只代传达）",
     inputSchema: { type: "object", properties: {
       id: { type: "string" }, gate: { type: "string" },
       value: { type: "string", enum: ["approved", "rejected"] },
       comment: { type: "string" }, confirm: { type: "boolean" } }, required: ["id", "gate", "value"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      const body = { gate: a.gate, value: a.value, id: a.id };
+      if (a.confirm !== true) return NEED_CONFIRM;
+      const body: Record<string, unknown> = { gate: a.gate, value: a.value, id: a.id };
       if (a.comment) body.comment = a.comment;
       return api("POST", "/api/gate", { body });
     },
@@ -103,8 +127,8 @@ const TOOLS = [
       id: { type: "string" }, step: { type: "string" }, note: { type: "string" }, confirm: { type: "boolean" } },
       required: ["id", "step"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      const body = { step: a.step, wo: a.id, skipped: true };
+      if (a.confirm !== true) return NEED_CONFIRM;
+      const body: Record<string, unknown> = { step: a.step, wo: a.id, skipped: true };
       if (a.note) body.note = a.note;
       return api("POST", "/api/skip", { body });
     },
@@ -115,8 +139,8 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {
       id: { type: "string" }, mode: { type: "string" }, confirm: { type: "boolean" } }, required: ["id"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      const body = { wo: a.id };
+      if (a.confirm !== true) return NEED_CONFIRM;
+      const body: Record<string, unknown> = { wo: a.id };
       if (a.mode) body.mode = a.mode;
       return api("POST", "/api/start", { body });
     },
@@ -127,7 +151,7 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {
       id: { type: "string" }, reason: { type: "string" }, confirm: { type: "boolean" } }, required: ["id"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
+      if (a.confirm !== true) return NEED_CONFIRM;
       return api("POST", "/api/wo-close", { body: { id: a.id, reason: a.reason || "" } });
     },
   },
@@ -152,8 +176,8 @@ const TOOLS = [
       user_name: { type: "string" }, line_ids: { type: "array", items: { type: "string" } },
       confirm: { type: "boolean" } }, required: ["user_name", "line_ids"] },
     run: async (a) => {
-      if (!a.confirm) return NEED_CONFIRM;
-      const me = await api("GET", "/api/me");
+      if (a.confirm !== true) return NEED_CONFIRM;
+      const me = (await api("GET", "/api/me")) as { kind?: string; admin?: boolean };
       if (me.kind === "guest" && !me.admin) {
         return { error: "令牌管理需要管理员或 GitCode 身份（当前为访客）", hint: "配置 AINATIVE_TOKEN 后重试" };
       }
@@ -168,21 +192,21 @@ const TOOLS = [
       agent: { type: "string", description: "节点 agent_id" },
       resume: { type: "string", description: "续接历史会话的 sid（可选）" } }, required: ["agent"] },
     read: true,
-    run: async (a) => wsOpen({ agent: a.agent, resume: a.resume }),
+    run: async (a) => wsOpen({ agent: String(a.agent), resume: a.resume ? String(a.resume) : undefined }),
   },
   {
     name: "chat_send",
     description: "向已建立的 chat 会话发送一条消息（session/prompt）",
     inputSchema: { type: "object", properties: {
       session: { type: "string" }, text: { type: "string" } }, required: ["session", "text"] },
-    run: async (a) => wsSend(a.session, a.text),
+    run: async (a) => wsSend(String(a.session), String(a.text)),
   },
   {
     name: "chat_read",
     description: "排空 chat 会话收件缓冲（两次调用间到达的帧全量返回，不丢）",
     inputSchema: { type: "object", properties: { session: { type: "string" } }, required: ["session"] },
     read: true,
-    run: async (a) => wsRead(a.session),
+    run: async (a) => wsRead(String(a.session)),
   },
   {
     name: "chat_wait",
@@ -190,44 +214,58 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {
       session: { type: "string" }, timeout_ms: { type: "number", default: 10000 } }, required: ["session"] },
     read: true,
-    run: async (a) => wsWait(a.session, a.timeout_ms || 10000),
+    run: async (a) => wsWait(String(a.session), typeof a.timeout_ms === "number" ? a.timeout_ms : 10000),
   },
   {
     name: "chat_status",
     description: "查看 chat 会话连接状态/缓冲水位/重连次数",
     inputSchema: { type: "object", properties: { session: { type: "string" } }, required: ["session"] },
     read: true,
-    run: async (a) => wsStatus(a.session),
+    run: async (a) => wsStatus(String(a.session)),
   },
   {
     name: "chat_close",
     description: "关闭 chat 会话",
     inputSchema: { type: "object", properties: { session: { type: "string" } }, required: ["session"] },
-    run: async (a) => wsClose(a.session),
+    run: async (a) => wsClose(String(a.session)),
   },
 ];
 
-const NEED_CONFIRM = { error: "这是写操作", hint: "调用时传 confirm:true 执行；建议先说明将产生的影响" };
-
 // ---------------- MCP stdio 协议（newline-delimited JSON-RPC 2.0） ----------------
-const rl = readline.createInterface({ input: process.stdin });
-function send(j) { process.stdout.write(JSON.stringify(j) + "\n"); }
+interface RpcMsg {
+  id?: number | string | null;
+  method?: string;
+  params?: {
+    name?: string;
+    arguments?: Record<string, unknown>;
+    uri?: string;
+    protocolVersion?: string;
+  };
+}
 
-rl.on("line", (line) => {
-  let msg; try { msg = JSON.parse(line); } catch { return; }
-  handle(msg).catch(e => {
-    if (msg.id !== undefined) send({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: String(e.message || e) } });
+const rl = readline.createInterface({ input: process.stdin });
+function send(j: unknown): void {
+  process.stdout.write(JSON.stringify(j) + "\n");
+}
+
+rl.on("line", (line: string) => {
+  let msg: RpcMsg;
+  try { msg = JSON.parse(line) as RpcMsg; } catch { return; }
+  handle(msg).catch((e: unknown) => {
+    if (msg.id !== undefined && msg.id !== null) {
+      send({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: String(e instanceof Error ? e.message : e) } });
+    }
   });
 });
 
-async function handle(msg) {
+async function handle(msg: RpcMsg): Promise<void> {
   const { id, method, params } = msg;
   switch (method) {
     case "initialize":
       send({ jsonrpc: "2.0", id, result: {
         protocolVersion: params?.protocolVersion || "2024-11-05",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "ainative-mcp", version: "0.3.0" },
+        serverInfo: { name: "ainative-mcp", version: "0.4.0" },
       } });
       return;
     case "notifications/initialized": return;
@@ -240,9 +278,10 @@ async function handle(msg) {
       if (!t) { send({ jsonrpc: "2.0", id, error: { code: -32602, message: `未知工具: ${params?.name}` } }); return; }
       try {
         const r = await t.run(params?.arguments || {});
-        send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], isError: !!r?.error } });
+        send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(r, null, 2) }], isError: !!(r && typeof r === "object" && "error" in r) } });
       } catch (e) {
-        send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ error: e.message, hint: e.hint, http: e.http }, null, 2) }], isError: true } });
+        const err = e as { message?: string; hint?: string; http?: number };
+        send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ error: err.message, hint: err.hint, http: err.http }, null, 2) }], isError: true } });
       }
       return;
     }
@@ -250,20 +289,21 @@ async function handle(msg) {
       // workorder 只读资源（ADR-0005：DB=投影，资源读 /api/wo）
       try {
         const j = await api("GET", "/api/lines");
-        const wos = (j.data || []).map(w => ({ uri: `wo://${w.id}`, name: `${w.id} ${w.topic || ""}`, mimeType: "application/json" }));
+        const rows = (Array.isArray(j.data) ? j.data : []) as WoRow[];
+        const wos = rows.map((w) => ({ uri: `wo://${w.id}`, name: `${w.id} ${w.topic || ""}`, mimeType: "application/json" }));
         send({ jsonrpc: "2.0", id, result: { resources: wos } });
-      } catch (e) { send({ jsonrpc: "2.0", id, result: { resources: [] } }); }
+      } catch { send({ jsonrpc: "2.0", id, result: { resources: [] } }); }
       return;
     }
     case "resources/read": {
       const m = String(params?.uri || "").match(/^wo:\/\/(\S+)$/);
       if (!m) { send({ jsonrpc: "2.0", id, error: { code: -32602, message: "仅支持 wo://<id>" } }); return; }
       const j = await api("GET", `/api/wo/${m[1]}`);
-      send({ jsonrpc: "2.0", id, result: { contents: [{ uri: params.uri, mimeType: "application/json", text: JSON.stringify(j, null, 2) }] } });
+      send({ jsonrpc: "2.0", id, result: { contents: [{ uri: params?.uri ?? `wo://${m[1]}`, mimeType: "application/json", text: JSON.stringify(j, null, 2) }] } });
       return;
     }
     default:
-      if (id !== undefined) send({ jsonrpc: "2.0", id, error: { code: -32601, message: `method not found: ${method}` } });
+      if (id !== undefined && id !== null) send({ jsonrpc: "2.0", id, error: { code: -32601, message: `method not found: ${method}` } });
   }
 }
-process.stderr.write(`ainative-mcp v0.3.0 ready (${TOOLS.length} tools)\n`);
+process.stderr.write(`ainative-mcp v0.4.0 ready (${TOOLS.length} tools)\n`);

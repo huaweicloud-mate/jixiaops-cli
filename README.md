@@ -1,4 +1,4 @@
-# ainative-cli
+﻿# ainative-cli
 
 OperationAINative 平台的命令行操作面 + agent 插件（CLI / MCP 双入口，同一内核）。
 
@@ -11,7 +11,7 @@ OperationAINative 平台的命令行操作面 + agent 插件（CLI / MCP 双入�
 
 ```bash
 npx .                    # 仓库内直接跑
-node bin/ainative.mjs console auth whoami   # 首次运行自动访客登录
+node bin/ainative.ts console auth whoami   # 首次运行自动访客登录
 ```
 
 无令牌时自动以**访客身份**使用（能力随平台 GUEST_MODE）；需要管理员/真实身份：

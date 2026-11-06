@@ -15,17 +15,17 @@
 
 ## 快速开始
 
-零配置，开箱即用（无令牌时自动以**访客身份**运行，能力随平台 GUEST_MODE）：
+两步：全局安装，然后一行验证（无令牌时自动以**访客身份**运行，能力随平台 GUEST_MODE）：
 
 ```bash
-npx jixiaops console auth whoami
-# │    │        │       │    └─ 具体命令："我是谁"——查当前身份
-# │    │        │       └─ 子命令组：认证
-# │    │        └─ 命令组：平台控制台（console 下还有 wo/lines/token/ws 等）
-# │    └─ 包名（也是 CLI 命令名）
-# └─ npm 包运行器：临时下载直接跑，免安装
+npm install -g jixiaops
+jixiaops console auth whoami
+# │        │       │    └─ 具体命令："我是谁"——查当前身份
+# │        │       └─ 子命令组：认证
+# │        └─ 命令组：平台控制台（console 下还有 wo/lines/token/ws 等）
+# └─ CLI 命令名（全局安装后进 PATH；MCP Server 入口是 jixiaops-mcp，同样进 PATH）
 #
-# 一行同时验证四件事：npm 能装包 ✚ CLI 能运行 ✚ 凭据链能通（无令牌自动访客登录）
+# 一行同时验证四件事：npm 全局安装成功 ✚ CLI 能运行 ✚ 凭据链能通（无令牌自动访客登录）
 # ✚ 平台端点可达。返回 JSON 里的 _identity.source 标明本次用的是哪条凭据。
 ```
 
@@ -40,11 +40,14 @@ echo '{"token":"<平台令牌>"}' > ~/.jixiaops/config.json   # ② 配置文件
 ## 安装
 
 ```bash
-# 临时运行（免安装）
-npx jixiaops console auth whoami
-
-# 全局安装
+# 推荐：全局安装（jixiaops + jixiaops-mcp 双命令进 PATH）
 npm install -g jixiaops
+
+# 升级
+npm install -g jixiaops@latest
+
+# 仅试用、不安装（临时下载直接跑，不进 PATH；缓存版本可能滞后于 npm latest）
+npx jixiaops console auth whoami
 
 # 从源码运行
 git clone https://gitcode.com/sunzy1940/jixiaops-cli.git
@@ -52,47 +55,47 @@ cd jixiaops-cli && npm install && npm run build
 node dist/bin/jixiaops.js --help
 ```
 
-要求 Node ≥ 22.18（原生 TS 类型剥离，零构建依赖）。
+要求 Node ≥ 22.18（原生 TS 类型剥离，零构建依赖）。全局安装的前提是 npm 全局 bin 目录在 PATH 中（默认即满足；nvm 用户确认当前 node 版本已启用）。
 
 ## 各 Agent 接入 MCP
 
-`jixiaops-mcp` 是与 CLI 同一内核的 MCP Server（stdio，20 个工具）。各家 agent 一条命令接入：
+全局安装后，`jixiaops-mcp`（与 CLI 同一内核的 MCP Server，stdio，20 个工具）已在 PATH 中，各家 agent 一条命令接入，写法完全统一：
 
 **Claude Code**：
 
 ```bash
-claude mcp add jixiaops -- npx -y jixiaops mcp
+claude mcp add jixiaops -- jixiaops-mcp
 ```
 
 **Cursor**：
 
 ```bash
-cursor mcp add jixiaops -- npx -y jixiaops mcp
+cursor mcp add jixiaops -- jixiaops-mcp
 ```
 
 **Codex**：
 
 ```bash
-codex mcp add jixiaops -- npx -y jixiaops mcp
+codex mcp add jixiaops -- jixiaops-mcp
 ```
 
 **Gemini CLI**：
 
 ```bash
-gemini mcp add jixiaops -- npx -y jixiaops mcp
+gemini mcp add jixiaops -- jixiaops-mcp
 ```
 
 **CodeBuddy**：
 
 ```bash
-codebuddy mcp add jixiaops -- npx -y jixiaops mcp
+codebuddy mcp add jixiaops -- jixiaops-mcp
 ```
 
 **OpenCode**：
 
 ```bash
-opencode mcp add jixiaops -- npx jixiaops mcp
-# 注：opencode 的参数解析不认 npx 的 -y，别加；需要全局配置加 --global，注入身份加 --env JIXIAOPS_TOKEN=<令牌>
+opencode mcp add jixiaops -- jixiaops-mcp
+# 需要全局配置加 --global，注入身份加 --env JIXIAOPS_TOKEN=<令牌>
 ```
 
 **其他 agent（通用 JSON 配置）**：
@@ -101,14 +104,15 @@ opencode mcp add jixiaops -- npx jixiaops mcp
 {
   "mcpServers": {
     "jixiaops": {
-      "command": "npx",
-      "args": ["-y", "jixiaops", "mcp"]
+      "command": "jixiaops-mcp"
     }
   }
 }
 ```
 
 需要管理员/指定身份时，给配置加 `env`：`"env": { "JIXIAOPS_TOKEN": "<令牌>" }`（可选，默认访客自动登录）。
+
+> 说明：新版 CLI 的 `jixiaops mcp` 子命令与 `jixiaops-mcp` 等价。若未全局安装、坚持免安装试用，可将上述命令中的 `jixiaops-mcp` 换成 `npx -y jixiaops mcp`（注意 OpenCode 的参数解析不认 `npx` 的 `-y`，别加）。
 
 ## 命令总览
 

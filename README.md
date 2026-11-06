@@ -74,17 +74,11 @@ codex mcp add jixiaops -- npx -y jixiaops mcp
 gemini mcp add jixiaops -- npx -y jixiaops mcp
 ```
 
-**OpenCode**（`~/.config/opencode/opencode.jsonc`）：
+**OpenCode**：
 
-```jsonc
-{
-  "mcp": {
-    "jixiaops": {
-      "type": "local",
-      "command": ["npx", "-y", "jixiaops", "mcp"]
-    }
-  }
-}
+```bash
+opencode mcp add jixiaops -- npx -y jixiaops mcp
+# 加 --global 写全局配置；需要指定身份时：--env JIXIAOPS_TOKEN=<令牌>
 ```
 
 **其他 agent（通用 JSON 配置）**：

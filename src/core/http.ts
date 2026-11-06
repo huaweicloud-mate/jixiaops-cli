@@ -74,3 +74,14 @@ export async function apiRaw(
   const { j } = await _req(method, p, { rawBody: buf, contentType });
   return j;
 }
+
+/** 裸 GET 下载（artifact 签名直链回源等）。返回 Buffer，不解析 JSON。 */
+export async function apiBuf(p: string): Promise<Buffer> {
+  const ep = defaultEndpoint();
+  const id = await resolveIdentity(ep);
+  const r = await fetch(ep + p, { headers: { "Authorization": "Bearer " + id.token } });
+  if (!r.ok) {
+    throw apiErr(`下载失败 HTTP ${r.status}`, { http: r.status, exit: EXIT[r.status] || 1 });
+  }
+  return Buffer.from(await r.arrayBuffer());
+}

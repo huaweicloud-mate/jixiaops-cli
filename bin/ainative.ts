@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // bin/ainative.ts —— CLI 入口 v0.4.0（P2 全量命令 + WS 会话代理；TS 重构，行为与 0.3.x 对齐）
 // 运行：Node ≥22.18 原生 type stripping，零构建零依赖。
-import { api, apiRaw, type ApiObject } from "../src/core/http.ts";
+import { api, apiRaw, apiBuf, type ApiObject } from "../src/core/http.ts";
 import { defaultEndpoint, logout } from "../src/core/auth.ts";
 import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose, type OpenResult } from "../src/core/wsproxy.ts";
 import { apiErr, type ApiError, type ChatFrame } from "../src/core/types.ts";
@@ -45,6 +45,8 @@ const HELP = `ainative v0.4.0 —— OperationAINative 平台 CLI
   console wo skip <id> --step <s> [--reason <r>]
   console wo start <id> [--mode <m>]      派发（自动轮询至脱离 dispatching）
   console wo bind <id> --agent <a>        绑定执行节点
+  console wo artifact url <id> --file <f> [--ttl s]   产物签名直链（点开即看，免登录）
+  console wo artifact get <id> --file <f> [--out p]   下载产物到本地
   console wo close <id> [--reason <r>]    关闭（高危·非访客身份）
 产线/节点（只读）:
   console lines|devices|agents|agent-logs|stats|spec
@@ -174,6 +176,25 @@ async function main(): Promise<void> {
       const body: Record<string, unknown> = { id: rest[1], reason: s("reason") || "" };
       if (!flag("confirm")) { out({ dry_run: true, will_post: "/api/wo-close", body, warning: "关闭后成品档案只读，高危操作" }); return; }
       out(await api("POST", "/api/wo-close", { body })); return;
+    }
+    if (sub === "artifact") {
+      // wo artifact url <id> --file <rel> [--ttl s]   → 签名直链（点开即看，不暴露长期 token）
+      // wo artifact get <id> --file <rel> [--out p]  → 下载到本地
+      const act = rest[1];
+      if (act !== "url" && act !== "get") {
+        throw apiErr("用法: wo artifact url|get <id> --file <rel> [--ttl s | --out p]", { exit: 1 });
+      }
+      need(rest[2] && s("file"), "用法: wo artifact url|get <id> --file <rel> [--ttl s | --out p]");
+      const rel = (s("file") as string).replace(/\\/g, "/").replace(/^\/+/, "");
+      const qs = `wo=${encodeURIComponent(rest[2] as string)}&file=${encodeURIComponent(rel)}${s("ttl") ? `&ttl=${s("ttl")}` : ""}`;
+      const j = await api("GET", `/api/artifact/sign?${qs}`);
+      const urlPath = typeof j.url === "string" ? j.url : "";
+      if (act === "url") { out(j); return; }
+      const dest = (s("out") || rel.split("/").pop() || "artifact.bin") as string;
+      const buf = await apiBuf(urlPath);
+      fs.writeFileSync(dest, buf);
+      out({ ok: true, file: dest, bytes: buf.length, source: urlPath });
+      return;
     }
   }
 

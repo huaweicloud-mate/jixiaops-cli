@@ -62,6 +62,9 @@ WS 会话代理（chat 全双工，D5）:
   console ws wait <session> [--timeout 10000]
   console ws status <session> | console ws close <session>
 
+MCP Server:
+  mcp                                     启动 MCP Server（stdio，等价于 jixiaops-mcp）
+
 全局: --endpoint <url>  --pretty  --verbose
 写操作默认 dry-run，--confirm 才执行（D4）；人类闸口无绕过参数。`;
 function out(j) {
@@ -83,6 +86,11 @@ async function main() {
     if (!g || g === "help" || g === "--help") {
         console.log(HELP);
         return;
+    }
+    // ---------- MCP Server（同内核第二入口：jixiaops mcp → jixiaops-mcp）----------
+    if (g === "mcp") {
+        await import("./jixiaops-mcp.js");
+        return; // 该模块 import 即启动 stdio 服务
     }
     // ---------- 认证 ----------
     if (g === "console" && c === "auth" && rest[0] === "whoami") {

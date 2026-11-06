@@ -24,6 +24,7 @@ export AINATIVE_TOKEN=<令牌>     # 或 ~/.ainative/config.json
 
 - ✅ 凭据解析链（env → config → 访客自动登录+缓存复用防频控）
 - ✅ `console auth whoami/logout`、`wo get/new`、`lines/devices/agents/agent-logs/stats/overview/spec`
+- ✅ `wo artifact url|get`（2026-11-06）：产物签名直链签发与下载——worker 回报产物链接不再拼长期 token
 - ✅ 写操作默认 dry-run（D4）
 - ⏳ P1: openapi.yaml + asyncapi.yaml ｜ P2 续: 全部写命令 ｜ P4: MCP Server + WS 会话代理 ｜ P5: 本地包实测分发
 

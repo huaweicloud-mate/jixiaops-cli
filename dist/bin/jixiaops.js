@@ -5,6 +5,7 @@ import { api, apiRaw, apiBuf } from "../src/core/http.js";
 import { defaultEndpoint, logout } from "../src/core/auth.js";
 import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose } from "../src/core/wsproxy.js";
 import { apiErr } from "../src/core/types.js";
+import { pkgVersion } from "../src/core/version.js";
 import fs from "node:fs";
 import process from "node:process";
 const args = process.argv.slice(2);
@@ -26,7 +27,7 @@ if (opt.endpoint)
     process.env.JIXIAOPS_ENDPOINT = String(opt.endpoint);
 const s = (k) => { const v = opt[k]; return typeof v === "string" ? v : undefined; };
 const flag = (k) => opt[k] === true;
-const HELP = `jixiaops v0.5.2 —— JixiaOps 平台 CLI
+const HELP = `jixiaops v${pkgVersion()} —— JixiaOps 平台 CLI
 
 用法: jixiaops <group> <command> [args] [options]
 

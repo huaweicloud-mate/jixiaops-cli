@@ -4,6 +4,7 @@
 import { api, apiRaw, type ApiObject } from "../src/core/http.ts";
 import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose, wsList } from "../src/core/wsproxy.ts";
 import type { Json } from "../src/core/types.ts";
+import { pkgVersion } from "../src/core/version.ts";
 import fs from "node:fs";
 import readline from "node:readline";
 import process from "node:process";
@@ -265,7 +266,7 @@ async function handle(msg: RpcMsg): Promise<void> {
       send({ jsonrpc: "2.0", id, result: {
         protocolVersion: params?.protocolVersion || "2024-11-05",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "jixiaops-mcp", version: "0.5.0" },
+        serverInfo: { name: "jixiaops-mcp", version: pkgVersion() },
       } });
       return;
     case "notifications/initialized": return;
@@ -306,4 +307,4 @@ async function handle(msg: RpcMsg): Promise<void> {
       if (id !== undefined && id !== null) send({ jsonrpc: "2.0", id, error: { code: -32601, message: `method not found: ${method}` } });
   }
 }
-process.stderr.write(`jixiaops-mcp v0.5.0 ready (${TOOLS.length} tools)\n`);
+process.stderr.write(`jixiaops-mcp v${pkgVersion()} ready (${TOOLS.length} tools)\n`);

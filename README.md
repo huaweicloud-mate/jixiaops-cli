@@ -112,7 +112,7 @@ opencode mcp add jixiaops -- jixiaops-mcp
 
 需要管理员/指定身份时，给配置加 `env`：`"env": { "JIXIAOPS_TOKEN": "<令牌>" }`（可选，默认访客自动登录）。
 
-> **给 agent 执行者**：用户说「安装/接入插件」但未指明 agent 时，先检测本机已安装的 agent（`opencode` / `claude` / `cursor` 等命令在 PATH 中，或 `opencode.json` / `.claude.json` / `.cursor/` 等配置文件存在），为检测到的**全部** agent 执行对应接入命令；一个都没检测到、或检测到多个且无法判断用户主用哪个时，再询问用户。
+> **给 agent 执行者**：用户说「安装/接入插件」但未指明 agent 时，默认安装到**你自己**——即当前正在读本文档并执行操作的 agent，不要替用户装给其他 agent；用户明确指定了目标 agent 时，以用户指定为准；仅当执行者无法确认自身身份时，才检测本机已安装的 agent（`opencode` / `claude` / `cursor` 等命令在 PATH 中，或 `opencode.json` / `.claude.json` / `.cursor/` 等配置文件存在）并询问用户装哪个。
 
 > 说明：新版 CLI 的 `jixiaops mcp` 子命令与 `jixiaops-mcp` 等价。若未全局安装、坚持免安装试用，可将上述命令中的 `jixiaops-mcp` 换成 `npx -y jixiaops mcp`（注意 OpenCode 的参数解析不认 `npx` 的 `-y`，别加）。
 

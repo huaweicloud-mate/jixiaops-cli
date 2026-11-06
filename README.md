@@ -83,8 +83,8 @@ codebuddy mcp add jixiaops -- npx -y jixiaops mcp
 **OpenCode**：
 
 ```bash
-opencode mcp add jixiaops -- npx -y jixiaops mcp
-# 加 --global 写全局配置；需要指定身份时：--env JIXIAOPS_TOKEN=<令牌>
+opencode mcp add jixiaops -- npx jixiaops mcp
+# 注：opencode 的参数解析不认 npx 的 -y，别加；需要全局配置加 --global，注入身份加 --env JIXIAOPS_TOKEN=<令牌>
 ```
 
 **其他 agent（通用 JSON 配置）**：

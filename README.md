@@ -1,4 +1,4 @@
-# jixiaops
+# JixiaOps - 运营AI Native平台
 
 **JixiaOps 平台的 CLI 与 MCP Server**——平台控制台能做的一切，命令行都能做；agent 通过 MCP 直接调用。
 

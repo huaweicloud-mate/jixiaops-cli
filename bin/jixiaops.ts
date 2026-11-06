@@ -26,7 +26,7 @@ if (opt.endpoint) process.env.JIXIAOPS_ENDPOINT = String(opt.endpoint);
 const s = (k: string): string | undefined => { const v = opt[k]; return typeof v === "string" ? v : undefined; };
 const flag = (k: string): boolean => opt[k] === true;
 
-const HELP = `jixiaops v0.5.0 —— OperationAINative 平台 CLI
+const HELP = `jixiaops v0.5.2 —— JixiaOps 平台 CLI
 
 用法: jixiaops <group> <command> [args] [options]
 

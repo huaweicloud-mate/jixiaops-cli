@@ -1,18 +1,31 @@
 {
   "name": "jixiaops",
-  "version": "0.5.0",
-  "description": "OperationAINative 平台 CLI——平台控制台能做的一切，命令行都能做；也与 MCP Server 同一套内核（TS 版）",
+  "version": "0.5.2",
+  "description": "JixiaOps 平台的 CLI 与 MCP Server——工作单全流程、闸口、产物直链、WS 会话代理，平台控制台能做的一切命令行都能做，agent 通过 MCP 直接调用",
   "type": "module",
   "bin": {
-    "jixiaops": "bin/jixiaops.ts",
-    "jixiaops-mcp": "bin/jixiaops-mcp.ts"
+    "jixiaops": "dist/bin/jixiaops.js",
+    "jixiaops-mcp": "dist/bin/jixiaops-mcp.js"
   },
-  "files": ["bin/", "src/", "docs/", "README.md"],
-  "engines": { "node": ">=22.18" },
+  "files": [
+    "dist/",
+    "docs/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "agent", "cli", "operationainative"],
+  "keywords": [
+    "mcp",
+    "agent",
+    "cli",
+    "operationainative"
+  ],
   "license": "UNLICENSED",
   "private": false,
   "devDependencies": {

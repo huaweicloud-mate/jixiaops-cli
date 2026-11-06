@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// bin/ainative-mcp.ts —— MCP Server（stdio，newline-delimited JSON-RPC 2.0，零依赖）
+// bin/jixiaops-mcp.ts —— MCP Server（stdio，newline-delimited JSON-RPC 2.0，零依赖）
 // 工具集：CLI 同内核策展视图（架构文档 D2/§7）。写工具一律要求 confirm:true（D4）。
 import { api, apiRaw, type ApiObject } from "../src/core/http.ts";
 import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose, wsList } from "../src/core/wsproxy.ts";
@@ -179,7 +179,7 @@ const TOOLS: ToolDef[] = [
       if (a.confirm !== true) return NEED_CONFIRM;
       const me = (await api("GET", "/api/me")) as { kind?: string; admin?: boolean };
       if (me.kind === "guest" && !me.admin) {
-        return { error: "令牌管理需要管理员或 GitCode 身份（当前为访客）", hint: "配置 AINATIVE_TOKEN 后重试" };
+        return { error: "令牌管理需要管理员或 GitCode 身份（当前为访客）", hint: "配置 JIXIAOPS_TOKEN 后重试" };
       }
       return api("POST", "/api/token-issue", { body: { user_name: a.user_name, line_ids: a.line_ids } });
     },
@@ -265,7 +265,7 @@ async function handle(msg: RpcMsg): Promise<void> {
       send({ jsonrpc: "2.0", id, result: {
         protocolVersion: params?.protocolVersion || "2024-11-05",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "ainative-mcp", version: "0.4.0" },
+        serverInfo: { name: "jixiaops-mcp", version: "0.5.0" },
       } });
       return;
     case "notifications/initialized": return;
@@ -306,4 +306,4 @@ async function handle(msg: RpcMsg): Promise<void> {
       if (id !== undefined && id !== null) send({ jsonrpc: "2.0", id, error: { code: -32601, message: `method not found: ${method}` } });
   }
 }
-process.stderr.write(`ainative-mcp v0.4.0 ready (${TOOLS.length} tools)\n`);
+process.stderr.write(`jixiaops-mcp v0.5.0 ready (${TOOLS.length} tools)\n`);

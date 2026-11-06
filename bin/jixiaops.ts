@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// bin/ainative.ts —— CLI 入口 v0.4.0（P2 全量命令 + WS 会话代理；TS 重构，行为与 0.3.x 对齐）
+// bin/jixiaops.ts —— CLI 入口 v0.5.0（P2 全量命令 + WS 会话代理；TS 重构，行为与 0.3.x 对齐）
 // 运行：Node ≥22.18 原生 type stripping，零构建零依赖。
 import { api, apiRaw, apiBuf, type ApiObject } from "../src/core/http.ts";
 import { defaultEndpoint, logout } from "../src/core/auth.ts";
@@ -21,14 +21,14 @@ for (let i = 0; i < args.length; i++) {
     else opt[k] = args[++i];
   } else pos.push(a);
 }
-if (opt.endpoint) process.env.AINATIVE_ENDPOINT = String(opt.endpoint);
+if (opt.endpoint) process.env.JIXIAOPS_ENDPOINT = String(opt.endpoint);
 
 const s = (k: string): string | undefined => { const v = opt[k]; return typeof v === "string" ? v : undefined; };
 const flag = (k: string): boolean => opt[k] === true;
 
-const HELP = `ainative v0.4.0 —— OperationAINative 平台 CLI
+const HELP = `jixiaops v0.5.0 —— OperationAINative 平台 CLI
 
-用法: ainative <group> <command> [args] [options]
+用法: jixiaops <group> <command> [args] [options]
 
 认证:
   console auth whoami                     当前身份与权限
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
     const me = (await api("GET", "/api/me")) as { kind?: string; admin?: boolean };
     if (me.kind === "guest" && !me.admin) {
       throw apiErr("令牌管理需要管理员或 GitCode 身份（当前为访客）", {
-        hint: "ainative auth login 或 export AINATIVE_TOKEN=<管理员令牌>", exit: 3,
+        hint: "jixiaops auth login 或 export JIXIAOPS_TOKEN=<管理员令牌>", exit: 3,
       });
     }
     if (rest[0] === "list") { out(await api("GET", "/api/tokens")); return; }
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
     if (sub === "close") { need(sid, "用法: ws close <session>"); out(wsClose(sid)); return; }
   }
 
-  console.error(JSON.stringify({ error: `未知命令: ${pos.join(" ")}`, hint: "ainative help 查看用法" }));
+  console.error(JSON.stringify({ error: `未知命令: ${pos.join(" ")}`, hint: "jixiaops help 查看用法" }));
   process.exit(1);
 }
 

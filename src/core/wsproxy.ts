@@ -79,8 +79,8 @@ function errText(e: unknown): string {
 }
 
 async function connect(s: Session, verbose?: boolean, retried = false): Promise<void> {
-  const base = epWs(process.env.AINATIVE_ENDPOINT);
-  const id = await resolveIdentity(process.env.AINATIVE_ENDPOINT || defaultEndpoint());
+  const base = epWs(process.env.JIXIAOPS_ENDPOINT);
+  const id = await resolveIdentity(process.env.JIXIAOPS_ENDPOINT || defaultEndpoint());
   const url = `${base}/ws/chat/${encodeURIComponent(s.agent)}?token=${encodeURIComponent(id.token)}` +
     (s.sid ? `&resume_sid=${encodeURIComponent(s.sid)}` : "");
   const ws = new WebSocket(url);

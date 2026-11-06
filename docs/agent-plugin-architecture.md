@@ -36,7 +36,7 @@ flowchart LR
     end
     subgraph 插件层[本方案交付物]
         MCP[MCP Server<br/>tools + resources]
-        CLI[ainative CLI]
+        CLI[jixiaops CLI]
     end
     subgraph 平台[OperationAINative 平台]
         OW[ops-web :8081<br/>控制台面 · 控制面]
@@ -88,9 +88,9 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph NPM[npm 包 @yuanbeyond/ainative]
-        BIN1[bin: ainative<br/>人类 CLI]
-        BIN2[bin: ainative-mcp<br/>MCP Server]
+    subgraph NPM[npm 包 @yuanbeyond/jixiaops]
+        BIN1[bin: jixiaops<br/>人类 CLI]
+        BIN2[bin: jixiaops-mcp<br/>MCP Server]
         subgraph CORE[共享核心 core/]
             AUTH[auth 链<br/>env→config→cred 库]
             HTTP[http client<br/>重试/超时/JSON 输出]
@@ -117,11 +117,11 @@ flowchart TB
 
 | 层 | 职责 | 交付物 |
 |---|---|---|
-| **规格层** | OpenAPI 3.1 文档 = 全平台机器可读的能力清单；带 `x-ainative` 扩展（敏感度、闸口标记、幂等性） | `openapi.yaml` |
+| **规格层** | OpenAPI 3.1 文档 = 全平台机器可读的能力清单；带 `x-jixiaops` 扩展（敏感度、闸口标记、幂等性） | `openapi.yaml` |
 | **核心层** | HTTP client、凭据解析链、重试/超时、JSON 输出、错误语义化 | `src/core/` |
-| **CLI 层** | 每个端点一条命令（`ainative wo get <id>`），`--json` 默认机器可读，`--dry-run` 全写操作支持 | `bin/ainative.js` |
-| **MCP 层** | 从规格**策展**（不是照搬）出 ~25 个 tools + workorder 只读 resources；写操作带 confirm 语义 | `bin/ainative-mcp.js` |
-| **分发层** | npm 包，双 bin；`npx @yuanbeyond/ainative mcp` 一条命令接入任意 agent | npm registry / 私服 |
+| **CLI 层** | 每个端点一条命令（`jixiaops wo get <id>`），`--json` 默认机器可读，`--dry-run` 全写操作支持 | `bin/jixiaops.js` |
+| **MCP 层** | 从规格**策展**（不是照搬）出 ~25 个 tools + workorder 只读 resources；写操作带 confirm 语义 | `bin/jixiaops-mcp.js` |
+| **分发层** | npm 包，双 bin；`npx @yuanbeyond/jixiaops mcp` 一条命令接入任意 agent | npm registry / 私服 |
 
 ---
 
@@ -136,28 +136,28 @@ flowchart TB
 ### D2 · CLI 与 MCP 同包双 bin，MCP 是 CLI 的策展视图
 
 - **决策**：一个包两个 bin。MCP tool 内部直接调 CLI 的命令函数（不是 shell out），保证行为/鉴权/日志完全一致。
-- **理由**：两条消费路径一套实现，杜绝「CLI 能 MCP 不能」的偏差；agent 遇到 MCP 没覆盖的操作时，还能 `npx ainative --help` 自救。
+- **理由**：两条消费路径一套实现，杜绝「CLI 能 MCP 不能」的偏差；agent 遇到 MCP 没覆盖的操作时，还能 `npx jixiaops --help` 自救。
 
 ### D3 · 凭据解析链：env → 配置文件 → 凭据库 → **访客自动登录（零配置默认）**；包零凭据
 
 - **决策**：
-  1. `AINATIVE_TOKEN`（ops-web）/`AINATIVE_SERVE_TOKEN`（网关）环境变量优先；
-  2. 其次 `~/.ainative/config.json`（本地开发，权限 600）；
+  1. `JIXIAOPS_TOKEN`（ops-web）/`AINATIVE_SERVE_TOKEN`（网关）环境变量优先；
+  2. 其次 `~/.jixiaops/config.json`（本地开发，权限 600）；
   3. 生产/企业环境接凭证库（cred skill 同款约定）；
-  4. **以上都没有 → 自动访客登录**（`GET /api/auth/guest`，平台既有机制），会话缓存到 `~/.ainative/session.json`（权限 600，24h TTL）供后续复用——**首次使用零配置**。
+  4. **以上都没有 → 自动访客登录**（`GET /api/auth/guest`，平台既有机制），会话缓存到 `~/.jixiaops/session.json`（权限 600，24h TTL）供后续复用——**首次使用零配置**。
   - npm 包、日志、错误信息、`--verbose` 输出**一律脱敏**，token 只显示前 8 位。
-- **红线对齐**：AGENTS.md 安全红线第 1 条（凭据绝不写入文件或日志）。缓存的是**低权限访客会话**（非管理员凭据），泄漏面可控；`ainative auth logout` 即吊销。
+- **红线对齐**：AGENTS.md 安全红线第 1 条（凭据绝不写入文件或日志）。缓存的是**低权限访客会话**（非管理员凭据），泄漏面可控；`jixiaops auth logout` 即吊销。
 - **身份语义**（对齐 #27 登录体系）：
   - 访客身份 = 默认开箱即用，能力随平台 `GUEST_MODE` 走：`open` 可操作，`ro` 只读——CLI 从 `/api/me` 读取 `kind/ro` 并**透传平台侧判定**，不做二次授权；写操作被 403 时语义化提示「当前平台访客只读，配置管理员令牌后解除」；
   - **访客会话必须缓存复用**（24h 内同一会话），严禁每条命令重新登录——平台访客登录有频控（429）；
-  - **CLI 侧高危工具加身份护栏**：`token_issue`/`token_revoke`/`wo_close` 等标记 `x-ainative-min-identity: admin` 的 tool，检测到当前是访客身份时拒绝执行并提示升级身份（平台侧闸门之外的双保险）；
-  - 需要真实身份/归属时：env 注入管理员令牌，或 `ainative auth login` 引导（GitCode OAuth 本地回调已注册 127.0.0.1，CLI 可起临时回调监听完成浏览器授权）。
+  - **CLI 侧高危工具加身份护栏**：`token_issue`/`token_revoke`/`wo_close` 等标记 `x-jixiaops-min-identity: admin` 的 tool，检测到当前是访客身份时拒绝执行并提示升级身份（平台侧闸门之外的双保险）；
+  - 需要真实身份/归属时：env 注入管理员令牌，或 `jixiaops auth login` 引导（GitCode OAuth 本地回调已注册 127.0.0.1，CLI 可起临时回调监听完成浏览器授权）。
 
 ### D4 · 写操作安全闸：平台闸口优先，插件不加塞
 
 - **决策**：
   - 所有 POST 操作默认 `--dry-run`（打印将发出的请求与平台侧预检结果）；
-  - 标记 `x-ainative-gate: human` 的操作（发布类闸口），插件**只读展示** gate 状态，调写接口会被平台 403/闸口拒绝——插件不提供任何绕过参数；
+  - 标记 `x-jixiaops-gate: human` 的操作（发布类闸口），插件**只读展示** gate 状态，调写接口会被平台 403/闸口拒绝——插件不提供任何绕过参数；
   - MCP 侧高危工具（token-issue/wo-close/start）要求 agent 在 tool 参数里显式传 `confirm: true`，MCP server 对无 confirm 的写调用返回「请确认」而非执行。
 - **理由**：工作单状态机 + 产线独占（WO_LOCK）是平台正确性来源；agent 的价值是**加速通过闸口的准备工作**，不是替人拍板。
 
@@ -183,7 +183,7 @@ flowchart TB
 
 ### D6 · 双后端、双命令组，内网直连
 
-- **决策**：CLI 分 `ainative console ...`（ops-web）与 `ainative gw ...`（serve）两个命令组；配置里区分 `--endpoint-public`（WAF/域名，浏览器/远程 agent 用）与 `--endpoint-internal`（8081/8080 直连，同网 agent 用）。
+- **决策**：CLI 分 `jixiaops console ...`（ops-web）与 `jixiaops gw ...`（serve）两个命令组；配置里区分 `--endpoint-public`（WAF/域名，浏览器/远程 agent 用）与 `--endpoint-internal`（8081/8080 直连，同网 agent 用）。
 - **理由**：agent 若跑在平台同网（如 No1/myecs 节点），直连绕开 WAF 超时（#24 的教训：同步阻塞被 WAF 掐断）与 CDN 缓存干扰。
 
 ### D7 · 版本联动：spec 版本 = CLI 版本
@@ -199,7 +199,7 @@ flowchart TB
 
 ```mermaid
 flowchart TD
-    P0[P0 盘点<br/>全端点清单/敏感度/闸口标记] --> P1[P1 openapi.yaml<br/>手写规格 + x-ainative 扩展]
+    P0[P0 盘点<br/>全端点清单/敏感度/闸口标记] --> P1[P1 openapi.yaml<br/>手写规格 + x-jixiaops 扩展]
     P1 --> P2[P2 核心层<br/>auth 链/http client/JSON 输出]
     P2 --> P3[P3 CLI 层<br/>命令映射 + dry-run]
     P3 --> CT{契约测试<br/>schemathesis 全端点}
@@ -215,7 +215,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant Ag as AI Agent
-    participant Mcp as ainative-mcp
+    participant Mcp as jixiaops-mcp
     participant Cli as core（CLI 同源）
     participant OW as ops-web
     participant Human as 人（闸口）
@@ -253,7 +253,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Ag as AI Agent
-    participant Mcp as ainative-mcp（WS 会话代理）
+    participant Mcp as jixiaops-mcp（WS 会话代理）
     participant Buf as per-session 环形缓冲
     participant OW as ops-web /ws/chat/
     participant U as 用户（浏览器 chat）
@@ -303,11 +303,11 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    S[启动] --> C{本地会话缓存有效?<br/>~/.ainative/session.json}
+    S[启动] --> C{本地会话缓存有效?<br/>~/.jixiaops/session.json}
     C -->|有且未过期| USE[直接复用访客会话<br/>不重新登录·防频控]
-    C -->|无| E1{env AINATIVE_TOKEN?}
+    C -->|无| E1{env JIXIAOPS_TOKEN?}
     E1 -->|有| OK1[用 env token·管理员/指定身份]
-    E1 -->|无| E2{~/.ainative/config.json?}
+    E1 -->|无| E2{~/.jixiaops/config.json?}
     E2 -->|有且权限600| OK2[用配置文件 token]
     E2 -->|无/权限异常| E3{凭据库可达?}
     E3 -->|有| OK3[cred get 动态取]
@@ -325,7 +325,7 @@ flowchart TD
 flowchart TD
     T[agent 调用写 tool] --> D{confirm 参数?}
     D -->|无| ASK[返回「这是写操作，请携带 confirm:true 并说明影响」]
-    D -->|有| G{spec 标记 x-ainative-gate?}
+    D -->|有| G{spec 标记 x-jixiaops-gate?}
     G -->|human 闸口| REF[拒绝：该闸口必须人拍板<br/>返回闸口状态与等待指引]
     G -->|无| DR{dry-run?}
     DR -->|默认开| PRE[向平台发预检/回显请求体<br/>不落库]
@@ -355,11 +355,11 @@ flowchart LR
 | 阶段 | 内容 | 交付物 | 验收标准 | 估时 |
 |---|---|---|---|---|
 | **P0 盘点**（0.5d） | 全端点复核（含 serve 网关侧从 Go 二进制/运行时补全路径）、每端点标注敏感度/闸口/幂等性；确认 openapi 无自动生成捷径 | `docs/api-inventory.md` | 清单覆盖率 100%（与代码 grep 对照）；网关路径清单成型 | 0.5d |
-| **P1 规格**（1.5d） | 手写 `openapi.yaml`（3.1），`x-ainative-*` 扩展；WS 端点用 **AsyncAPI** 描述（D5）；错误响应统一建模（401/403/409/429 语义） | `openapi.yaml` + `asyncapi.yaml` | schemathesis 对 38 个端点生成用例零报错；AsyncAPI 消息 schema 覆盖 chat/worker 两通道；3 个 reviewer 过会 | 1.5d |
+| **P1 规格**（1.5d） | 手写 `openapi.yaml`（3.1），`x-jixiaops-*` 扩展；WS 端点用 **AsyncAPI** 描述（D5）；错误响应统一建模（401/403/409/429 语义） | `openapi.yaml` + `asyncapi.yaml` | schemathesis 对 38 个端点生成用例零报错；AsyncAPI 消息 schema 覆盖 chat/worker 两通道；3 个 reviewer 过会 | 1.5d |
 | **P2 核心**（2d） | TS 工程、auth 链（D3）、http client（超时/重试/脱敏）、JSON 输出与错误展开 | `src/core/` | 单测覆盖 auth 链三分支；脱敏快照测试通过 | 2d |
-| **P3 CLI**（2d） | 全端点命令映射（commander）、`--dry-run`、`--json`、交互兜底；chat 流式子命令 | `bin/ainative` | 平台全能力可用 CLI 完成（对照 §2.2 清单逐条演示）；P0-P3 合计可先发 `0.1.0` 内测 | 2d |
-| **P4 MCP**（2d） | 策展 ~25 tools + WS 会话代理 toolset（`ws_open/send/read/wait/status/close` + 环形缓冲 + 重连状态机 + 资源订阅推送，见 D5/§5.2.1）、workorder 只读 resources、confirm 语义、`ainative mcp` 启动 | `bin/ainative-mcp` | opencode/codex 各接入成功；chat 全双工实测：发一句→缓冲→ws_wait 收到→回复，中途 kill 网络重连不丢帧；写 tool 无 confirm 被拒；human 闸口 tool 只读 | 2d |
-| **P5 发布**（1d） | npm 发布（私服或公网）、README/quickstart、真实 agent 端到端演示（建单→分镜→产物→过闸展示） | `@yuanbeyond/ainative@1.0.0` | 领导演示场景跑通；安全审查（包内无凭据、日志脱敏审计）通过 | 1d |
+| **P3 CLI**（2d） | 全端点命令映射（commander）、`--dry-run`、`--json`、交互兜底；chat 流式子命令 | `bin/jixiaops` | 平台全能力可用 CLI 完成（对照 §2.2 清单逐条演示）；P0-P3 合计可先发 `0.1.0` 内测 | 2d |
+| **P4 MCP**（2d） | 策展 ~25 tools + WS 会话代理 toolset（`ws_open/send/read/wait/status/close` + 环形缓冲 + 重连状态机 + 资源订阅推送，见 D5/§5.2.1）、workorder 只读 resources、confirm 语义、`jixiaops mcp` 启动 | `bin/jixiaops-mcp` | opencode/codex 各接入成功；chat 全双工实测：发一句→缓冲→ws_wait 收到→回复，中途 kill 网络重连不丢帧；写 tool 无 confirm 被拒；human 闸口 tool 只读 | 2d |
+| **P5 发布**（1d） | npm 发布（私服或公网）、README/quickstart、真实 agent 端到端演示（建单→分镜→产物→过闸展示） | `@yuanbeyond/jixiaops@1.0.0` | 领导演示场景跑通；安全审查（包内无凭据、日志脱敏审计）通过 | 1d |
 | **P6 CI**（1d） | 契约测试进 CI、PR 模板检查项、release-please 版本联动 | CI 流水线 | 模拟一次「改路由不带 spec」被拦截 | 1d |
 
 **总计约 10 人日**，P3 结束即可内部试用，P5 结束可对外交付演示。
@@ -395,8 +395,8 @@ flowchart LR
 | agent 绕过人类闸口 | 高 | D4 硬拒绝 + 平台侧写闸本来就 403（双保险，不依赖插件自觉） |
 | 凭据泄漏进 npm 包/日志 | 高 | D3 零凭据打包 + 脱敏快照测试进 CI；访客自动登录让「不带凭据」与「零配置」兼容 |
 | 访客频控 429 / 多 agent 抢登 | 中 | 会话缓存复用（24h 单会话）；缓存文件加锁防多 MCP 实例并发重登 |
-| 访客身份的操作归属模糊 | 低 | 工作单归「访客-xxxx」；需归属到人时升级 GitCode/管理员身份（`ainative auth login` 或 env） |
-| 高危操作被访客执行 | 中 | 平台侧闸门 + CLI 侧 `x-ainative-min-identity: admin` 护栏双保险（D3） |
+| 访客身份的操作归属模糊 | 低 | 工作单归「访客-xxxx」；需归属到人时升级 GitCode/管理员身份（`jixiaops auth login` 或 env） |
+| 高危操作被访客执行 | 中 | 平台侧闸门 + CLI 侧 `x-jixiaops-min-identity: admin` 护栏双保险（D3） |
 | 令牌签发被 agent 滥用 | 中 | token_issue/revoke 列为高危 tool；平台侧令牌已有 expire/审计 |
 | WAF 超时误判（同步派发 #24 复现） | 中 | D6 内网直连 profile；CLI 对 long-op 用轮询而非长等待 |
 | WS 长连接在 agent 环境不稳 | 中 | D5 会话代理：服务端心跳 + 指数退避重连 + resume_sid 续接 + 环形缓冲跨重连保留；agent 侧无感 |
@@ -417,15 +417,15 @@ flowchart LR
 
 ```jsonc
 // opencode / claude code / codex 的 MCP 配置
-// AINATIVE_TOKEN 可选——不配则 CLI 自动以访客身份登录（零配置开箱）
+// JIXIAOPS_TOKEN 可选——不配则 CLI 自动以访客身份登录（零配置开箱）
 {
   "mcpServers": {
-    "ainative": {
+    "jixiaops": {
       "command": "npx",
-      "args": ["-y", "@yuanbeyond/ainative", "mcp"],
+      "args": ["-y", "@yuanbeyond/jixiaops", "mcp"],
       "env": {
-        "AINATIVE_ENDPOINT": "https://mcptest.api.hwcdeveloper.com",
-        "AINATIVE_TOKEN": "<可选：需要管理员/指定身份时，从凭据库注入，不写死>"
+        "JIXIAOPS_ENDPOINT": "https://mcptest.api.hwcdeveloper.com",
+        "JIXIAOPS_TOKEN": "<可选：需要管理员/指定身份时，从凭据库注入，不写死>"
       }
     }
   }
@@ -436,13 +436,13 @@ flowchart LR
 
 ```bash
 # 身份握手（首次配置自检）
-npx @yuanbeyond/ainative console auth whoami
+npx @yuanbeyond/jixiaops console auth whoami
 
 # 建单（dry-run 预览 → 确认执行）
-npx @yuanbeyond/ainative console wo new --topic "AI Native 运营范式" --line line-1 --dry-run
-npx @yuanbeyond/ainative console wo new --topic "AI Native 运营范式" --line line-1 --confirm
+npx @yuanbeyond/jixiaops console wo new --topic "AI Native 运营范式" --line line-1 --dry-run
+npx @yuanbeyond/jixiaops console wo new --topic "AI Native 运营范式" --line line-1 --confirm
 
 # 派发并轮询
-npx @yuanbeyond/ainative console wo start wo-20261105-001 --confirm
-watch -n 15 "npx @yuanbeyond/ainative console wo get wo-20261105-001 --json | jq .status"
+npx @yuanbeyond/jixiaops console wo start wo-20261105-001 --confirm
+watch -n 15 "npx @yuanbeyond/jixiaops console wo get wo-20261105-001 --json | jq .status"
 ```

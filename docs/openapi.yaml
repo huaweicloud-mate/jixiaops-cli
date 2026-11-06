@@ -99,7 +99,7 @@ paths:
     post:
       tags: [workorder]
       summary: 创建工作单（产线独占：同产线在产单冲突 → 409 附空闲产线）
-      x-ainative-write: true
+      x-jixiaops-write: true
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [topic], properties:
@@ -111,7 +111,7 @@ paths:
     post:
       tags: [workorder]
       summary: 上传总纲 markdown（裸 text/plain body；上传即拍板，快进分镜）
-      x-ainative-write: true
+      x-jixiaops-write: true
       parameters: [{ name: wo, in: query, required: true, schema: { type: string } }]
       requestBody: { content: { text/plain: { schema: { type: string } } } }
       responses: { "200": { description: OK }, "404": { description: 工作单不存在 } }
@@ -119,7 +119,7 @@ paths:
     post:
       tags: [workorder]
       summary: 上传产物（裸二进制 body；文件名限 \\w.- 与子目录；200MB 上限；closed 单 409）
-      x-ainative-write: true
+      x-jixiaops-write: true
       parameters:
         - { name: wo, in: query, required: true, schema: { type: string } }
         - { name: file, in: query, required: true, schema: { type: string } }
@@ -130,7 +130,7 @@ paths:
     post:
       tags: [workorder]
       summary: 闸口拍板（value 仅 approved/rejected；闸口 locked 时 409）
-      x-ainative-write: true
+      x-jixiaops-write: true
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [gate, value, id], properties:
@@ -141,7 +141,7 @@ paths:
     post:
       tags: [workorder]
       summary: 候选选择（"选 N" 走这里）
-      x-ainative-write: true
+      x-jixiaops-write: true
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [step, option], properties:
@@ -151,7 +151,7 @@ paths:
     post:
       tags: [workorder]
       summary: 跳过工位（仅 tts/subtitle/adapt 可跳，其余 400）
-      x-ainative-write: true
+      x-jixiaops-write: true
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [step, wo], properties:
@@ -161,7 +161,7 @@ paths:
     post:
       tags: [workorder]
       summary: 派发工作单（同步等网关回执；节点离线 502 附接入指引）
-      x-ainative-write: true
+      x-jixiaops-write: true
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [wo], properties: { wo: { type: string }, mode: { type: string } } } } }
@@ -173,7 +173,7 @@ paths:
     post:
       tags: [workorder]
       summary: 产线绑定节点（line 维度）
-      x-ainative-write: true
+      x-jixiaops-write: true
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [line, agent], properties: { line: { type: string }, agent: { type: string } } } } }
@@ -182,8 +182,8 @@ paths:
     post:
       tags: [workorder]
       summary: 关闭工作单（成品档案只读；仅 new/终态/总刹车在途可完结，其余 409）
-      x-ainative-write: true
-      x-ainative-min-identity: admin
+      x-jixiaops-write: true
+      x-jixiaops-min-identity: admin
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [id], properties: { id: { type: string }, reason: { type: string } } } } }
@@ -208,8 +208,8 @@ paths:
     post:
       tags: [token]
       summary: 签发产线令牌
-      x-ainative-write: true
-      x-ainative-min-identity: admin
+      x-jixiaops-write: true
+      x-jixiaops-min-identity: admin
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [user_name, line_ids], properties:
@@ -219,17 +219,17 @@ paths:
     post:
       tags: [token]
       summary: 吊销令牌
-      x-ainative-write: true
-      x-ainative-min-identity: admin
+      x-jixiaops-write: true
+      x-jixiaops-min-identity: admin
       requestBody:
         content: { application/json: { schema:
           { type: object, required: [token_hash], properties: { token_hash: { type: string } } } } }
       responses: { "200": { description: OK } }
   # ---------------- 总闸 ----------------
   /api/h:
-    post: { tags: [halt], summary: 总刹车（拒绝推进全部工作单）, x-ainative-write: true, responses: { "200": { description: OK } } }
+    post: { tags: [halt], summary: 总刹车（拒绝推进全部工作单）, x-jixiaops-write: true, responses: { "200": { description: OK } } }
   /api/resume:
-    post: { tags: [halt], summary: 解除总刹车, x-ainative-write: true, responses: { "200": { description: OK } } }
+    post: { tags: [halt], summary: 解除总刹车, x-jixiaops-write: true, responses: { "200": { description: OK } } }
   # ---------------- gw（ai-native-serve） ----------------
   /health:
     get:

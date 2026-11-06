@@ -74,6 +74,12 @@ codex mcp add jixiaops -- npx -y jixiaops mcp
 gemini mcp add jixiaops -- npx -y jixiaops mcp
 ```
 
+**CodeBuddy**：
+
+```bash
+codebuddy mcp add jixiaops -- npx -y jixiaops mcp
+```
+
 **OpenCode**：
 
 ```bash

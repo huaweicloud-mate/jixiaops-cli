@@ -9,10 +9,10 @@
 
 ```bash
 # 临时使用（推荐 agent 场景）
-npx @yuanbeyond/jixiaops --help
+npx jixiaops --help
 
 # 全局安装
-npm install -g @yuanbeyond/jixiaops
+npm install -g jixiaops
 jixiaops --help
 ```
 

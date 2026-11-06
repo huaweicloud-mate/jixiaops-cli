@@ -88,7 +88,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph NPM[npm 包 @yuanbeyond/jixiaops]
+    subgraph NPM[npm 包 jixiaops]
         BIN1[bin: jixiaops<br/>人类 CLI]
         BIN2[bin: jixiaops-mcp<br/>MCP Server]
         subgraph CORE[共享核心 core/]
@@ -121,7 +121,7 @@ flowchart TB
 | **核心层** | HTTP client、凭据解析链、重试/超时、JSON 输出、错误语义化 | `src/core/` |
 | **CLI 层** | 每个端点一条命令（`jixiaops wo get <id>`），`--json` 默认机器可读，`--dry-run` 全写操作支持 | `bin/jixiaops.js` |
 | **MCP 层** | 从规格**策展**（不是照搬）出 ~25 个 tools + workorder 只读 resources；写操作带 confirm 语义 | `bin/jixiaops-mcp.js` |
-| **分发层** | npm 包，双 bin；`npx @yuanbeyond/jixiaops mcp` 一条命令接入任意 agent | npm registry / 私服 |
+| **分发层** | npm 包，双 bin；`npx jixiaops mcp` 一条命令接入任意 agent | npm registry / 私服 |
 
 ---
 
@@ -359,7 +359,7 @@ flowchart LR
 | **P2 核心**（2d） | TS 工程、auth 链（D3）、http client（超时/重试/脱敏）、JSON 输出与错误展开 | `src/core/` | 单测覆盖 auth 链三分支；脱敏快照测试通过 | 2d |
 | **P3 CLI**（2d） | 全端点命令映射（commander）、`--dry-run`、`--json`、交互兜底；chat 流式子命令 | `bin/jixiaops` | 平台全能力可用 CLI 完成（对照 §2.2 清单逐条演示）；P0-P3 合计可先发 `0.1.0` 内测 | 2d |
 | **P4 MCP**（2d） | 策展 ~25 tools + WS 会话代理 toolset（`ws_open/send/read/wait/status/close` + 环形缓冲 + 重连状态机 + 资源订阅推送，见 D5/§5.2.1）、workorder 只读 resources、confirm 语义、`jixiaops mcp` 启动 | `bin/jixiaops-mcp` | opencode/codex 各接入成功；chat 全双工实测：发一句→缓冲→ws_wait 收到→回复，中途 kill 网络重连不丢帧；写 tool 无 confirm 被拒；human 闸口 tool 只读 | 2d |
-| **P5 发布**（1d） | npm 发布（私服或公网）、README/quickstart、真实 agent 端到端演示（建单→分镜→产物→过闸展示） | `@yuanbeyond/jixiaops@1.0.0` | 领导演示场景跑通；安全审查（包内无凭据、日志脱敏审计）通过 | 1d |
+| **P5 发布**（1d） | npm 发布（私服或公网）、README/quickstart、真实 agent 端到端演示（建单→分镜→产物→过闸展示） | `jixiaops@1.0.0` | 领导演示场景跑通；安全审查（包内无凭据、日志脱敏审计）通过 | 1d |
 | **P6 CI**（1d） | 契约测试进 CI、PR 模板检查项、release-please 版本联动 | CI 流水线 | 模拟一次「改路由不带 spec」被拦截 | 1d |
 
 **总计约 10 人日**，P3 结束即可内部试用，P5 结束可对外交付演示。
@@ -422,7 +422,7 @@ flowchart LR
   "mcpServers": {
     "jixiaops": {
       "command": "npx",
-      "args": ["-y", "@yuanbeyond/jixiaops", "mcp"],
+      "args": ["-y", "jixiaops", "mcp"],
       "env": {
         "JIXIAOPS_ENDPOINT": "https://mcptest.api.hwcdeveloper.com",
         "JIXIAOPS_TOKEN": "<可选：需要管理员/指定身份时，从凭据库注入，不写死>"
@@ -436,13 +436,13 @@ flowchart LR
 
 ```bash
 # 身份握手（首次配置自检）
-npx @yuanbeyond/jixiaops console auth whoami
+npx jixiaops console auth whoami
 
 # 建单（dry-run 预览 → 确认执行）
-npx @yuanbeyond/jixiaops console wo new --topic "AI Native 运营范式" --line line-1 --dry-run
-npx @yuanbeyond/jixiaops console wo new --topic "AI Native 运营范式" --line line-1 --confirm
+npx jixiaops console wo new --topic "AI Native 运营范式" --line line-1 --dry-run
+npx jixiaops console wo new --topic "AI Native 运营范式" --line line-1 --confirm
 
 # 派发并轮询
-npx @yuanbeyond/jixiaops console wo start wo-20261105-001 --confirm
-watch -n 15 "npx @yuanbeyond/jixiaops console wo get wo-20261105-001 --json | jq .status"
+npx jixiaops console wo start wo-20261105-001 --confirm
+watch -n 15 "npx jixiaops console wo get wo-20261105-001 --json | jq .status"
 ```

@@ -1,5 +1,5 @@
 {
-  "name": "@yuanbeyond/jixiaops",
+  "name": "jixiaops",
   "version": "0.5.0",
   "description": "OperationAINative 平台 CLI——平台控制台能做的一切，命令行都能做；也与 MCP Server 同一套内核（TS 版）",
   "type": "module",

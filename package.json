@@ -1,6 +1,6 @@
 {
   "name": "jixiaops",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "JixiaOps 平台的 CLI 与 MCP Server——工作单全流程、闸口、产物直链、WS 会话代理，平台控制台能做的一切命令行都能做，agent 通过 MCP 直接调用",
   "type": "module",
   "bin": {

@@ -27,6 +27,9 @@ const TURN_DISCIPLINE = [
     "   后台进程无法唤醒 agent 会话，不得以此替代规则 1 的监听循环。",
     "6. 首次建单/派发时，先用一两句向用户预告本流程的人工闸点（如选题/钩子/成片/发布等 N 处需要人工拍板），",
     "   让用户对「每一步需要人参与」有预期——不要等闸口停下才第一次告知。",
+    "7. 算力口径（防误解红线）：工作单的全部生产环节（配音/编码/装配）都运行在**平台产线节点（云端 ECS worker）**上，",
+    "   不占用用户本机任何算力；平台执行记录里的「本地/本机/纯本地 ffmpeg」等说法均指**该执行节点的本地**，",
+    "   不是用户的电脑。向用户转述执行细节时必须带上这层说明（如「在产线节点（云端 ECS）本地计算」）。",
 ].join("\n");
 const AFTER_DISPATCH_HINT = "已派发，节点异步执行中：进入监听循环（chat_wait 长等，或每 15~30s wo_get 轮询），" +
     "直到闸口 pending_human（发具体拍板请求）/ 任务终态 / 异常才允许结束回合；" +
@@ -34,13 +37,27 @@ const AFTER_DISPATCH_HINT = "已派发，节点异步执行中：进入监听循
 const AFTER_CHAT_OPEN_HINT = "会话已建立：监听主用形态是 chat_wait(session, timeout_ms) 长等下一帧；" +
     "agent 忙别的时帧进服务端缓冲不丢，回来用 chat_read 排空。" +
     "持有回合直到闸口 pending_human / 任务终态 / 异常才收尾。";
+// ---------- 身份与凭据 FAQ（instructions 第二节 + whoami 访客提示） ----------
+const CREDENTIAL_FAQ = [
+    "# 身份与凭据（用户问「凭据/权限/怎么登录」时按此回答，不要臆造）",
+    "- 插件默认**访客身份自动登录**（零配置，只读），开箱即可试用；",
+    "- **凭据 = 平台令牌（token）**，由平台管理员签发：`jixiaops console token issue --name <名字> --lines <产线列表>`；",
+    "- 用户配置方式（二选一）：① 环境变量 `export JIXIAOPS_TOKEN=<令牌>`；② 写入文件 `~/.jixiaops/config.json` 内容 `{\"token\":\"<令牌>\"}`；",
+    "- 配置后重新调用 whoami 验证身份（_identity.source 会标明用的是哪条凭据）；",
+    "- 写操作（建单/派发/拍板/令牌管理）需要非访客身份；访客被拒时按上述指引引导用户配置，不要反复重试。",
+].join("\n");
 const TOOLS = [
     {
         name: "whoami",
-        description: "查看当前平台身份与权限（访客/管理员/GitCode），判断可执行的操作范围",
+        description: "查看当前平台身份与权限（访客/管理员/GitCode），判断可执行的操作范围；访客身份时返回值带凭据配置指引",
         inputSchema: { type: "object", properties: {}, required: [] },
         read: true,
-        run: async () => api("GET", "/api/me"),
+        run: async () => {
+            const me = (await api("GET", "/api/me"));
+            if (me.kind === "guest" && !me.admin)
+                return { ...me, hint: "当前为访客身份（只读，零配置自动登录）。需要写权限时向用户解释：凭据=平台令牌，由管理员签发（jixiaops console token issue）；用户配置方式二选一：export JIXIAOPS_TOKEN=<令牌>，或写入 ~/.jixiaops/config.json {\"token\":\"<令牌>\"}，配置后重新 whoami 验证" };
+            return me;
+        },
     },
     {
         name: "wo_list",
@@ -288,7 +305,7 @@ async function handle(msg) {
                     protocolVersion: params?.protocolVersion || "2024-11-05",
                     capabilities: { tools: {}, resources: {} },
                     serverInfo: { name: "jixiaops-mcp", version: pkgVersion() },
-                    instructions: TURN_DISCIPLINE,
+                    instructions: TURN_DISCIPLINE + "\n\n" + CREDENTIAL_FAQ,
                 } });
             return;
         case "notifications/initialized": return;

@@ -105,7 +105,11 @@ async function main(): Promise<void> {
 
   // ---------- 认证 ----------
   if (g === "console" && c === "auth" && rest[0] === "whoami") {
-    out({ ...(await api("GET", "/api/me")), endpoint: defaultEndpoint() }); return;
+    const me = (await api("GET", "/api/me")) as { kind?: string; admin?: boolean; [k: string]: unknown };
+    if (me.kind === "guest" && !me.admin) {
+      me.hint = "当前为访客身份（只读，零配置自动登录）。需要写权限：管理员签发平台令牌（jixiaops console token issue）→ 用户配置 export JIXIAOPS_TOKEN=<令牌> 或写入 ~/.jixiaops/config.json {\"token\":\"<令牌>\"} → 重新 whoami 验证";
+    }
+    out({ ...me, endpoint: defaultEndpoint() }); return;
   }
   if (g === "console" && c === "auth" && rest[0] === "logout") {
     logout(); out({ ok: true, cleared: "local session cache" }); return;

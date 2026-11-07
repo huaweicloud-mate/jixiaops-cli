@@ -14,25 +14,6 @@
 
 写操作默认 dry-run（`--confirm` 才执行）；人类闸口（选题/批准/驳回）无绕过参数。
 
-### 值班监控（agent 会话外触达用户）
-
-```bash
-# 盯一张单：闸口等你拍板 / 状态推进 / 疑似停摆时，stdout+蜂鸣提醒
-npx jixiaops console watch --wo wo-20261106-001
-
-# 停摆阈值 5 分钟，变化推飞书机器人 webhook（对平台零写操作，只提醒不动手）
-npx jixiaops console watch --wo wo-20261106-001 --stall 5 \
-  --notify https://open.feishu.cn/open-apis/bot/v2/hook/xxx
-
-# 全量盯所有工作单，单次检查退出（适合 cron 每分钟跑）
-npx jixiaops console watch --once
-
-# 快照落自定义目录（默认 ~/.jixiaops；多环境/服务化场景不依赖 HOME）
-npx jixiaops console watch --wo wo-20261106-001 --out ./watch-state
-```
-
-快照落盘 `~/.jixiaops/watch-<wo>.json`，agent 断点续盯时先读此文件即可恢复现场。
-
 ## 快速开始
 
 两步：全局安装，然后一行验证（无令牌时自动以**访客身份**运行，能力随平台 GUEST_MODE）：

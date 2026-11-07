@@ -76,6 +76,24 @@ node dist/bin/jixiaops.js --help
 
 要求 Node ≥ 22.18（原生 TS 类型剥离，零构建依赖）。全局安装的前提是 npm 全局 bin 目录在 PATH 中（默认即满足；nvm 用户确认当前 node 版本已启用）。
 
+## 升级与验证
+
+```bash
+# 升级（配置零迁移：令牌/快照文件全部沿用）
+npm install -g jixiaops@latest
+jixiaops --help        # 横幅显示新版本号 = 磁盘已更新
+
+# 关键一步：重启宿主 agent（WorkBuddy / OpenCode / Claude Code 等）
+# MCP Server 是 stdio 子进程，代码在宿主会话启动时已加载进内存——
+# 只更新包不重启宿主，运行中的 MCP 仍是旧版
+```
+
+验证运行中的 MCP 已是新版（重启后任选其一）：
+
+- **行为探针**：让 agent 调 `whoami`——访客身份返回值带 `hint` 字段（凭据配置指引）即为 ≥0.6.0；
+- **宿主日志**：MCP 启动 stderr 行 `jixiaops-mcp v<版本> ready (20 tools)`；
+- **命令行**：`jixiaops --help` 横幅版本号（注意这只证明磁盘文件是新版，不代表宿主里运行中的 MCP 已更新）。
+
 ## 各 Agent 接入 MCP
 
 全局安装后，`jixiaops-mcp`（与 CLI 同一内核的 MCP Server，stdio，20 个工具）已在 PATH 中，各家 agent 一条命令接入，写法完全统一：

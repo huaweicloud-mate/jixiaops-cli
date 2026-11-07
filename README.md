@@ -48,6 +48,8 @@ jixiaops console auth whoami
 
 需要管理员/真实身份时升级凭据（三选一，优先级从高到低）：
 
+> 令牌获取：**向平台管理员申请**（告知名字 + 需要的产线）——签发命令 `jixiaops console token issue` 仅管理员可执行，普通用户无法自行签发。
+
 ```bash
 export JIXIAOPS_TOKEN=<平台令牌>          # ① 环境变量
 echo '{"token":"<平台令牌>"}' > ~/.jixiaops/config.json   # ② 配置文件

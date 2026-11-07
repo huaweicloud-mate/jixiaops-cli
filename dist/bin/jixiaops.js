@@ -108,7 +108,7 @@ async function main() {
     if (g === "console" && c === "auth" && rest[0] === "whoami") {
         const me = (await api("GET", "/api/me"));
         if (me.kind === "guest" && !me.admin) {
-            me.hint = "当前为访客身份（只读，零配置自动登录）。需要写权限：管理员签发平台令牌（jixiaops console token issue）→ 用户配置 export JIXIAOPS_TOKEN=<令牌> 或写入 ~/.jixiaops/config.json {\"token\":\"<令牌>\"} → 重新 whoami 验证";
+            me.hint = "当前为访客身份（只读，零配置自动登录）。需要写权限：向平台管理员申请令牌（普通用户无法自行签发，告知名字+需要的产线，由管理员执行签发并交付 token）→ 配置 export JIXIAOPS_TOKEN=<令牌> 或 ~/.jixiaops/config.json {\"token\":\"<令牌>\"} → 重新 whoami 验证";
         }
         out({ ...me, endpoint: defaultEndpoint() });
         return;

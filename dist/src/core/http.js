@@ -4,7 +4,7 @@ import { apiErr } from "./types.js";
 const EXIT = { 401: 2, 403: 3, 409: 4, 429: 5 };
 const HINTS = {
     401: "令牌失效——重新登录（jixiaops auth login）或检查 JIXIAOPS_TOKEN",
-    403: "权限不足——访客只读或高危操作。升级凭据：管理员签发平台令牌（jixiaops console token issue），用户配置 export JIXIAOPS_TOKEN=<令牌> 或写入 ~/.jixiaops/config.json {\"token\":\"<令牌>\"}；whoami 查看当前身份",
+    403: "权限不足——访客只读或高危操作。升级凭据：向平台管理员申请令牌（签发命令 token issue 仅管理员可执行，告知名字+需要的产线），拿到 token 后配置 export JIXIAOPS_TOKEN=<令牌> 或写入 ~/.jixiaops/config.json {\"token\":\"<令牌>\"}；whoami 查看当前身份",
     409: "资源冲突——见 error/hint 详情（如产线占用会附空闲产线列表）",
     429: "请求过频——访客登录有频控，会话缓存应已复用，稍后再试",
 };

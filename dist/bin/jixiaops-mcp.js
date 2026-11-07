@@ -41,10 +41,12 @@ const AFTER_CHAT_OPEN_HINT = "会话已建立：监听主用形态是 chat_wait(
 const CREDENTIAL_FAQ = [
     "# 身份与凭据（用户问「凭据/权限/怎么登录」时按此回答，不要臆造）",
     "- 插件默认**访客身份自动登录**（零配置，只读），开箱即可试用；",
-    "- **凭据 = 平台令牌（token）**，由平台管理员签发：`jixiaops console token issue --name <名字> --lines <产线列表>`；",
-    "- 用户配置方式（二选一）：① 环境变量 `export JIXIAOPS_TOKEN=<令牌>`；② 写入文件 `~/.jixiaops/config.json` 内容 `{\"token\":\"<令牌>\"}`；",
+    "- **凭据 = 平台令牌（token）**。普通用户**无法自行签发**（签发命令仅管理员可执行）：向平台管理员申请，",
+    "  告知「你的名字 + 需要操作的产线」，由管理员执行 `jixiaops console token issue --name <名字> --lines <产线列表>` 并把 token 交付给你；",
+    "- 拿到 token 后用户自行配置（二选一）：① 环境变量 `export JIXIAOPS_TOKEN=<令牌>`；② 写入文件 `~/.jixiaops/config.json` 内容 `{\"token\":\"<令牌>\"}`；",
     "- 配置后重新调用 whoami 验证身份（_identity.source 会标明用的是哪条凭据）；",
-    "- 写操作（建单/派发/拍板/令牌管理）需要非访客身份；访客被拒时按上述指引引导用户配置，不要反复重试。",
+    "- 写操作（建单/派发/拍板/令牌管理）需要非访客身份；访客被拒时引导用户**找管理员申请**，",
+    "  不要让用户自己去跑签发命令，也不要反复重试。",
 ].join("\n");
 const TOOLS = [
     {
@@ -55,7 +57,7 @@ const TOOLS = [
         run: async () => {
             const me = (await api("GET", "/api/me"));
             if (me.kind === "guest" && !me.admin)
-                return { ...me, hint: "当前为访客身份（只读，零配置自动登录）。需要写权限时向用户解释：凭据=平台令牌，由管理员签发（jixiaops console token issue）；用户配置方式二选一：export JIXIAOPS_TOKEN=<令牌>，或写入 ~/.jixiaops/config.json {\"token\":\"<令牌>\"}，配置后重新 whoami 验证" };
+                return { ...me, hint: "当前为访客身份（只读，零配置自动登录）。需要写权限时向用户解释：凭据=平台令牌，普通用户无法自行签发——请向管理员申请（告知名字+需要的产线，由管理员执行签发并交付 token），拿到后配置 export JIXIAOPS_TOKEN=<令牌> 或 ~/.jixiaops/config.json {\"token\":\"<令牌>\"}，再 whoami 验证" };
             return me;
         },
     },

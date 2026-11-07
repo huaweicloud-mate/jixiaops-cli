@@ -4,6 +4,11 @@
 
 npm 包：[jixiaops](https://www.npmjs.com/package/jixiaops) ｜ 仓库：gitcode.com/sunzy1940/jixiaops-cli
 
+## [0.6.1] - 2026-11-07
+
+### 新增
+- `console watch` 支持 `--out <目录>`：快照落盘目录可自定义（默认 `~/.jixiaops`），启动输出带 `snap_dir` 字段，多级目录自动创建——服务化/容器/多环境场景不再依赖 HOME；MCP 派发 hint 与回合纪律规则 5 同步提及
+
 ## [0.6.0] - 2026-11-07
 
 npm 上 0.5.9 之后的第一个正式版（本地 0.6.1~0.6.3 迭代并入本版）。

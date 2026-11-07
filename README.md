@@ -26,6 +26,9 @@ npx jixiaops console watch --wo wo-20261106-001 --stall 5 \
 
 # 全量盯所有工作单，单次检查退出（适合 cron 每分钟跑）
 npx jixiaops console watch --once
+
+# 快照落自定义目录（默认 ~/.jixiaops；多环境/服务化场景不依赖 HOME）
+npx jixiaops console watch --wo wo-20261106-001 --out ./watch-state
 ```
 
 快照落盘 `~/.jixiaops/watch-<wo>.json`，agent 断点续盯时先读此文件即可恢复现场。

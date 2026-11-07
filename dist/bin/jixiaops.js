@@ -55,12 +55,12 @@ const HELP = `jixiaops v${pkgVersion()} —— JixiaOps 平台 CLI
 产线/节点（只读）:
   console lines|devices|agents|agent-logs|stats|spec
 值班监控（只读·常驻进程，补「会话外无人触达用户」的洞）:
-  console watch [--wo <id>] [--interval s] [--stall min] [--once] [--max s]
+  console watch [--wo <id>] [--interval s] [--stall min] [--once] [--max s] [--out <dir>]
                 [--notify <url>] [--exec <cmd>]
                                   盯工作单：闸口 pending_human→拍板提醒、状态推进、疑似停摆（updated_at 不动超时）
                                   通知出口：stdout+蜂鸣；--notify webhook（URL 含 feishu/larksuite 自动用飞书格式）；
                                             --exec <cmd>（经 JIXIAOPS_WATCH_MESSAGE 环境变量传消息）
-                                  快照落盘 ~/.jixiaops/watch-<wo>.json（与 agent 断点续盯文件共用）
+                                  快照落盘 <目录>/watch-<wo>.json（默认 ~/.jixiaops，--out <dir> 自定义目录；与 agent 断点续盯文件共用）
                                   对平台零写操作（默认只通知不动手）；--once 单次检查退出（适合 cron）；Ctrl+C 退出
 令牌（高危·非访客身份）:
   console token list | issue --name <n> --lines <l1,l2> | revoke --hash <h>
@@ -423,7 +423,13 @@ async function cmdWatch() {
     const once = flag("once");
     const maxMs = s("max") ? parseInt(s("max"), 10) * 1000 : 0;
     const deadline = maxMs ? Date.now() + maxMs : 0;
-    const snapDir = path.join(os.homedir(), ".jixiaops");
+    // 快照落盘目录：--out <dir> 自定义（多环境/服务化场景不依赖 HOME），默认 ~/.jixiaops
+    const outArg = s("out");
+    const snapDir = outArg ? path.resolve(outArg) : path.join(os.homedir(), ".jixiaops");
+    try {
+        fs.mkdirSync(snapDir, { recursive: true });
+    }
+    catch { /* 落盘时再尽力 */ }
     /** 上轮快照：status/gates/updated_at + 停摆时钟 */
     const prev = new Map();
     /** 事件历史（随快照落盘，agent 断点恢复时读它即知全流程时间线） */
@@ -511,7 +517,8 @@ async function cmdWatch() {
         ok: true, mode: wo ? `single:${wo}` : "all-active", interval_s: intervalMs / 1000,
         stall_min: stallMin, once, max_s: maxMs ? maxMs / 1000 : null,
         notify: notifyUrl ? "webhook" : execCmd ? "exec" : "stdout",
-        readonly: true, hint: "对平台零写操作；Ctrl+C 退出；快照在 ~/.jixiaops/watch-<wo>.json",
+        snap_dir: snapDir,
+        readonly: true, hint: `对平台零写操作；Ctrl+C 退出；快照在 ${path.join(snapDir, "watch-<wo>.json")}（--out <dir> 可自定义）`,
     });
     const tick = async () => {
         try {

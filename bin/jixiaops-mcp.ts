@@ -44,9 +44,11 @@ const TURN_DISCIPLINE = [
   "3. 禁止：监听循环未达退出条件就结束回合；禁止「我继续盯着，有动静随时汇报」这类无终止承诺的收尾。",
   "4. 回合被迫中断时（宿主超时/上下文上限）：先落状态文件 ~/.jixiaops/watch-<wo_id>.json（在盯什么、循环到哪、恢复条件），",
   "   再如实告知用户「本轮监听到此暂停，回来说『继续盯』即可从断点恢复」；下一回合先读该文件再续，不从零重查。",
-  "5. 宿主提供 shell 执行时：优先用现成的值班命令 `jixiaops console watch --wo <id>`（常驻进程：盯状态→通知用户→落盘快照，对平台只读）",
-  "   替代手写脚本；也可另写零依赖轮询脚本，职责仅限「状态变化时通知用户（系统通知/IM webhook）+ 落盘最新快照」；",
-  "   后台进程无法唤醒 agent 会话，不得以此替代规则 1 的监听循环。",
+  "5. 长任务感知由值班进程兜底（用户零感知）：CLI 已随插件全局安装，派发成功后 agent 用宿主的 shell/后台执行能力",
+  "   **自己拉起** `jixiaops console watch --wo <id>`，不要指导用户去跑；监听循环中随时读快照",
+  "   ~/.jixiaops/watch-<wo>.json 对账（events 字段=事件时间线，恢复/续盯先读它）。",
+  "   注意：后台进程无法唤醒已结束的 agent 会话——会话存活期靠规则 1 的监听循环实时感知，",
+  "   会话结束后由值班进程持续盯+叫人，agent 下一回合读快照秒接上。仅当宿主无 shell 能力时才退化为纯轮询并如实告知用户。",
   "6. 首次建单/派发时，先用一两句向用户预告本流程的人工闸点（如选题/钩子/成片/发布等 N 处需要人工拍板），",
   "   让用户对「每一步需要人参与」有预期——不要等闸口停下才第一次告知。",
   "7. 算力口径（防误解红线）：工作单的全部生产环节（配音/编码/装配）都运行在**平台产线节点（云端 ECS worker）**上，",
@@ -54,8 +56,12 @@ const TURN_DISCIPLINE = [
   "   不是用户的电脑。向用户转述执行细节时必须带上这层说明（如「在产线节点（云端 ECS）本地计算」）。",
 ].join("\n");
 
-const AFTER_DISPATCH_HINT =
-  "已派发，节点异步执行中：进入监听循环（chat_wait 长等，或每 15~30s wo_get 轮询），" +
+const AFTER_DISPATCH_HINT = (id: string) =>
+  "已派发，节点异步执行中。立即做两件事：\n" +
+  "1. 用宿主的 shell/后台执行能力自己拉起值班进程（CLI 已随插件全局安装，用户零感知，无需用户参与）：\n" +
+  `   jixiaops console watch --wo ${id}\n` +
+  "   它持续盯状态并刷新快照 ~/.jixiaops/watch-" + id + ".json（events 字段=事件时间线）。\n" +
+  "2. 持有当前回合进入监听循环（chat_wait 长等优先，或读快照对账），" +
   "直到闸口 pending_human（发具体拍板请求）/ 任务终态 / 异常才允许结束回合；" +
   "禁止「继续盯着，有动静随时汇报」式无终止收尾。";
 
@@ -194,7 +200,7 @@ const TOOLS: ToolDef[] = [
       const body: Record<string, unknown> = { wo: a.id };
       if (a.mode) body.mode = a.mode;
       const r = await api("POST", "/api/start", { body });
-      return { ...r, _next: AFTER_DISPATCH_HINT };
+      return { ...r, _next: AFTER_DISPATCH_HINT(String(a.id)) };
     },
   },
   {

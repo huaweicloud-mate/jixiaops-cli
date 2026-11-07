@@ -345,12 +345,18 @@ async function cmdWatch(): Promise<void> {
 
   /** 上轮快照：status/gates/updated_at + 停摆时钟 */
   const prev = new Map<string, { status: string; gates: string; updated_at: string; first_seen: number; stall_notified: boolean }>();
+  /** 事件历史（随快照落盘，agent 断点恢复时读它即知全流程时间线） */
+  const eventsLog = new Map<string, Array<{ at: string; event: string }>>();
   /** 收工标记：单工位终态/到时后置位，让事件循环自然退出（Windows 上 process.exit 会撞 stdout 管道断言） */
   let stopped: string | null = null;
 
-  const emit = async (msg: string, bell: boolean): Promise<void> => {
+  const emit = async (id: string, msg: string, bell: boolean): Promise<void> => {
     out({ event: msg });
     if (bell) process.stdout.write("\x07");
+    const log = eventsLog.get(id) ?? [];
+    log.push({ at: new Date().toISOString().slice(11, 19), event: msg });
+    while (log.length > 50) log.shift();   // 防长任务无限增长
+    eventsLog.set(id, log);
     if (notifyUrl) await watchPost(notifyUrl, msg).catch((e: unknown) => console.error(JSON.stringify({ warn: `notify 失败: ${e instanceof Error ? e.message : String(e)}` })));
     if (execCmd) { try { spawn(execCmd, [], { shell: true, stdio: "ignore", env: { ...process.env, JIXIAOPS_WATCH_MESSAGE: msg } }); } catch { /* 通知失败不影响值班 */ } }
   };
@@ -381,22 +387,23 @@ async function cmdWatch(): Promise<void> {
       let stallNotified = old && old.updated_at === updated ? old.stall_notified : false;
 
       // 1) 拍板请求：闸口进入 pending_human（基线也报——cron/once 场景首轮即有用）
-      if (freshPending.length) await emit(watchMsg("拍板请求", w, { gates: freshPending, hint: "平台在等你决策，去控制台或回复 agent" }), true);
+      if (freshPending.length) await emit(id, watchMsg("拍板请求", w, { gates: freshPending, hint: "平台在等你决策，去控制台或回复 agent" }), true);
       // 2) 状态推进（跳过基线，避免首轮刷屏）
-      if (!isBaseline && status !== old!.status) await emit(watchMsg("状态推进", w, { from: old!.status, to: status }), false);
+      if (!isBaseline && status !== old!.status) await emit(id, watchMsg("状态推进", w, { from: old!.status, to: status }), false);
       // 3) 任务终态（单工位模式基线也报；全量模式基线不报，避免历史 closed 刷屏）
-      if (isTerminal && (!isBaseline || Boolean(wo))) await emit(watchMsg("任务终态", w), false);
+      if (isTerminal && (!isBaseline || Boolean(wo))) await emit(id, watchMsg("任务终态", w), false);
       // 4) 疑似停摆：updated_at 超过 stall 分钟不动、且不在等拍板/终态（每轮只报一次）
       if (!isBaseline && !isTerminal && !pending.length && !stallNotified && stallMin > 0 && Date.now() - firstSeen >= stallMin * 60000) {
-        await emit(watchMsg("疑似停摆", w, { updated_at: updated, minutes: stallMin, hint: "编辑器/节点可能未自动推进，需人工查看（本进程不动手，只提醒）" }), true);
+        await emit(id, watchMsg("疑似停摆", w, { updated_at: updated, minutes: stallMin, hint: "编辑器/节点可能未自动推进，需人工查看（本进程不动手，只提醒）" }), true);
         stallNotified = true;
       }
-      // 快照落盘（与 agent 断点续盯文件共用）
+      // 快照落盘（与 agent 断点续盯文件共用；含事件历史，agent 恢复即知全流程时间线）
       try {
         fs.writeFileSync(path.join(snapDir, `watch-${id}.json`), JSON.stringify({
           id, topic: w.topic, status, gates: gatesObj, updated_at: updated,
           watched_at: new Date().toISOString(),
-          note: "jixiaops watch 快照：agent 回合恢复/续盯时先读此文件，不从零重查",
+          events: eventsLog.get(id) ?? [],
+          note: "jixiaops watch 快照：agent 回合恢复/续盯时先读此文件（events=已发生的事件时间线），不从零重查",
         }, null, 2));
       } catch { /* 落盘尽力而为 */ }
       prev.set(id, { status, gates: gatesJson, updated_at: updated, first_seen: firstSeen, stall_notified: stallNotified || (isTerminal ? true : false) });

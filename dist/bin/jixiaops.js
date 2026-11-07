@@ -7,6 +7,9 @@ import { wsOpen, wsSend, wsRead, wsWait, wsStatus, wsClose } from "../src/core/w
 import { apiErr } from "../src/core/types.js";
 import { pkgVersion } from "../src/core/version.js";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawn } from "node:child_process";
 import process from "node:process";
 const args = process.argv.slice(2);
 const opt = {};
@@ -15,7 +18,7 @@ for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a.startsWith("--")) {
         const k = a.slice(2);
-        if (["confirm", "pretty", "verbose", "json"].includes(k))
+        if (["confirm", "pretty", "verbose", "json", "once"].includes(k))
             opt[k] = true;
         else
             opt[k] = args[++i];
@@ -51,6 +54,14 @@ const HELP = `jixiaops v${pkgVersion()} —— JixiaOps 平台 CLI
   console wo close <id> [--reason <r>]    关闭（高危·非访客身份）
 产线/节点（只读）:
   console lines|devices|agents|agent-logs|stats|spec
+值班监控（只读·常驻进程，补「会话外无人触达用户」的洞）:
+  console watch [--wo <id>] [--interval s] [--stall min] [--once] [--max s]
+                [--notify <url>] [--exec <cmd>]
+                                  盯工作单：闸口 pending_human→拍板提醒、状态推进、疑似停摆（updated_at 不动超时）
+                                  通知出口：stdout+蜂鸣；--notify webhook（URL 含 feishu/larksuite 自动用飞书格式）；
+                                            --exec <cmd>（经 JIXIAOPS_WATCH_MESSAGE 环境变量传消息）
+                                  快照落盘 ~/.jixiaops/watch-<wo>.json（与 agent 断点续盯文件共用）
+                                  对平台零写操作（默认只通知不动手）；--once 单次检查退出（适合 cron）；Ctrl+C 退出
 令牌（高危·非访客身份）:
   console token list | issue --name <n> --lines <l1,l2> | revoke --hash <h>
 总闸:
@@ -267,6 +278,11 @@ async function main() {
         out(await api("GET", READONLY[c]));
         return;
     }
+    // ---------- watch（常驻值班：盯状态 + 叫人 + 落盘快照；对平台零写操作） ----------
+    if (g === "console" && c === "watch") {
+        await cmdWatch();
+        return;
+    }
     // ---------- 令牌（高危） ----------
     if (g === "console" && c === "token") {
         const me = (await api("GET", "/api/me"));
@@ -377,5 +393,134 @@ async function main() {
     }
     console.error(JSON.stringify({ error: `未知命令: ${pos.join(" ")}`, hint: "jixiaops help 查看用法" }));
     process.exit(1);
+}
+const WATCH_TERMINAL = new Set(["closed", "failed", "cancelled"]);
+/** 事件 → 用户可读消息 */
+function watchMsg(ev, w, extra) {
+    const base = `【JixiaOps·${ev}】${w.id || "?"}（${w.topic || "无主题"}）status=${w.status || "?"}`;
+    return extra && Object.keys(extra).length ? `${base} ${JSON.stringify(extra)}` : base;
+}
+/** webhook 出口：URL 含 feishu/larksuite 时自动用飞书自定义机器人格式，其余发 {text} */
+async function watchPost(url, msg) {
+    const body = /feishu|larksuite/i.test(url)
+        ? { msg_type: "text", content: { text: msg } }
+        : { text: msg };
+    const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok)
+        throw new Error(`webhook HTTP ${r.status}`);
+}
+/** console watch 主循环 */
+async function cmdWatch() {
+    const wo = s("wo");
+    const intervalMs = Math.max(3, parseInt(s("interval") || "15", 10)) * 1000;
+    const stallMin = parseFloat(s("stall") || "10"); // 分钟，支持小数（测试用 0.05 = 3s）
+    const notifyUrl = s("notify");
+    const execCmd = s("exec");
+    const once = flag("once");
+    const maxMs = s("max") ? parseInt(s("max"), 10) * 1000 : 0;
+    const deadline = maxMs ? Date.now() + maxMs : 0;
+    const snapDir = path.join(os.homedir(), ".jixiaops");
+    /** 上轮快照：status/gates/updated_at + 停摆时钟 */
+    const prev = new Map();
+    /** 收工标记：单工位终态/到时后置位，让事件循环自然退出（Windows 上 process.exit 会撞 stdout 管道断言） */
+    let stopped = null;
+    const emit = async (msg, bell) => {
+        out({ event: msg });
+        if (bell)
+            process.stdout.write("\x07");
+        if (notifyUrl)
+            await watchPost(notifyUrl, msg).catch((e) => console.error(JSON.stringify({ warn: `notify 失败: ${e instanceof Error ? e.message : String(e)}` })));
+        if (execCmd) {
+            try {
+                spawn(execCmd, [], { shell: true, stdio: "ignore", env: { ...process.env, JIXIAOPS_WATCH_MESSAGE: msg } });
+            }
+            catch { /* 通知失败不影响值班 */ }
+        }
+    };
+    const check = async () => {
+        let rows;
+        if (wo) {
+            rows = [(await api("GET", `/api/wo/${wo}`))];
+        }
+        else {
+            const j = (await api("GET", "/api/lines"));
+            rows = (j.data ?? []);
+        }
+        for (const w of rows) {
+            const id = String(w.id || "");
+            if (!id)
+                continue;
+            const status = String(w.status ?? "");
+            const gatesJson = JSON.stringify(w.gates ?? {});
+            const updated = String(w.updated_at ?? "");
+            const old = prev.get(id);
+            const isBaseline = !old;
+            const gatesObj = (w.gates ?? {});
+            const pending = Object.entries(gatesObj).filter(([, v]) => v === "pending_human").map(([k]) => k);
+            const oldPending = old ? (Object.entries(JSON.parse(old.gates)).filter(([, v]) => v === "pending_human").map(([k]) => k)) : [];
+            const freshPending = pending.filter((g) => !oldPending.includes(g));
+            const isTerminal = WATCH_TERMINAL.has(status);
+            // 停摆时钟：updated_at 首次被观察到的时间（变了就重置）
+            const firstSeen = old && old.updated_at === updated ? old.first_seen : Date.now();
+            let stallNotified = old && old.updated_at === updated ? old.stall_notified : false;
+            // 1) 拍板请求：闸口进入 pending_human（基线也报——cron/once 场景首轮即有用）
+            if (freshPending.length)
+                await emit(watchMsg("拍板请求", w, { gates: freshPending, hint: "平台在等你决策，去控制台或回复 agent" }), true);
+            // 2) 状态推进（跳过基线，避免首轮刷屏）
+            if (!isBaseline && status !== old.status)
+                await emit(watchMsg("状态推进", w, { from: old.status, to: status }), false);
+            // 3) 任务终态（单工位模式基线也报；全量模式基线不报，避免历史 closed 刷屏）
+            if (isTerminal && (!isBaseline || Boolean(wo)))
+                await emit(watchMsg("任务终态", w), false);
+            // 4) 疑似停摆：updated_at 超过 stall 分钟不动、且不在等拍板/终态（每轮只报一次）
+            if (!isBaseline && !isTerminal && !pending.length && !stallNotified && stallMin > 0 && Date.now() - firstSeen >= stallMin * 60000) {
+                await emit(watchMsg("疑似停摆", w, { updated_at: updated, minutes: stallMin, hint: "编辑器/节点可能未自动推进，需人工查看（本进程不动手，只提醒）" }), true);
+                stallNotified = true;
+            }
+            // 快照落盘（与 agent 断点续盯文件共用）
+            try {
+                fs.writeFileSync(path.join(snapDir, `watch-${id}.json`), JSON.stringify({
+                    id, topic: w.topic, status, gates: gatesObj, updated_at: updated,
+                    watched_at: new Date().toISOString(),
+                    note: "jixiaops watch 快照：agent 回合恢复/续盯时先读此文件，不从零重查",
+                }, null, 2));
+            }
+            catch { /* 落盘尽力而为 */ }
+            prev.set(id, { status, gates: gatesJson, updated_at: updated, first_seen: firstSeen, stall_notified: stallNotified || (isTerminal ? true : false) });
+            // 单工位模式：终态即收工（置标记自然退出，不硬 process.exit）
+            if (wo && isTerminal) {
+                out({ ok: true, exit_reason: "terminal", wo: id, status });
+                stopped = "terminal";
+                return;
+            }
+        }
+    };
+    out({
+        ok: true, mode: wo ? `single:${wo}` : "all-active", interval_s: intervalMs / 1000,
+        stall_min: stallMin, once, max_s: maxMs ? maxMs / 1000 : null,
+        notify: notifyUrl ? "webhook" : execCmd ? "exec" : "stdout",
+        readonly: true, hint: "对平台零写操作；Ctrl+C 退出；快照在 ~/.jixiaops/watch-<wo>.json",
+    });
+    const tick = async () => {
+        try {
+            await check();
+        }
+        catch (e) {
+            console.error(JSON.stringify({ warn: `本轮查询失败，下轮继续: ${e instanceof Error ? e.message : String(e)}` }));
+        }
+        if (deadline && Date.now() >= deadline)
+            stopped = "max";
+    };
+    await tick();
+    if (once || stopped)
+        return;
+    // 注意：不 unref——这个 interval 就是值班进程的生命线，事件循环空了进程也不许退
+    const timer = setInterval(() => {
+        if (stopped) {
+            clearInterval(timer);
+            return;
+        }
+        void tick();
+    }, intervalMs);
 }
 main().catch(fail);

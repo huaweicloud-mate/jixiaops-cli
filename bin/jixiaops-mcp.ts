@@ -30,6 +30,37 @@ interface WoRow {
 
 const NEED_CONFIRM = { error: "这是写操作", hint: "调用时传 confirm:true 执行；建议先说明将产生的影响" };
 
+// ---------- 执行指导（回合纪律） ----------
+// 传递通道：① initialize.instructions（全局注入）② 工具 description（静态）③ 写操作返回值 hint（时机最准）。
+// 目标行为：派发后持有回合监听，直到拿到执行结果、形成具体拍板请求才收尾——禁止空头承诺式收尾。
+const TURN_DISCIPLINE = [
+  "# jixiaops 执行纪律（派发/监控场景必读）",
+  "产线任务是异步的：wo_start 派发后节点在后台执行，推进情况要靠你监听。规则：",
+  "1. 派发/推段成功后，持有当前回合进入监听循环：首选 chat_wait 长等节点帧；无 WS 会话时退化为每 15~30s wo_get/wo_gate 轮询。",
+  "2. 循环退出条件（满足其一才允许结束回合）：",
+  "   a. 闸口进入 pending_human → 向用户发出具体拍板请求（附产物/预览直链 + 「过 / 改」选项）；",
+  "   b. 任务到达终态（closed/failed）→ 汇报结果；",
+  "   c. 异常（节点离线/费用超线/停摆超时）→ 上报现状并给出选项。",
+  "3. 禁止：监听循环未达退出条件就结束回合；禁止「我继续盯着，有动静随时汇报」这类无终止承诺的收尾。",
+  "4. 回合被迫中断时（宿主超时/上下文上限）：先落状态文件 ~/.jixiaops/watch-<wo_id>.json（在盯什么、循环到哪、恢复条件），",
+  "   再如实告知用户「本轮监听到此暂停，回来说『继续盯』即可从断点恢复」；下一回合先读该文件再续，不从零重查。",
+  "5. 宿主提供 shell 执行时：优先用现成的值班命令 `jixiaops console watch --wo <id>`（常驻进程：盯状态→通知用户→落盘快照，对平台只读）",
+  "   替代手写脚本；也可另写零依赖轮询脚本，职责仅限「状态变化时通知用户（系统通知/IM webhook）+ 落盘最新快照」；",
+  "   后台进程无法唤醒 agent 会话，不得以此替代规则 1 的监听循环。",
+  "6. 首次建单/派发时，先用一两句向用户预告本流程的人工闸点（如选题/钩子/成片/发布等 N 处需要人工拍板），",
+  "   让用户对「每一步需要人参与」有预期——不要等闸口停下才第一次告知。",
+].join("\n");
+
+const AFTER_DISPATCH_HINT =
+  "已派发，节点异步执行中：进入监听循环（chat_wait 长等，或每 15~30s wo_get 轮询），" +
+  "直到闸口 pending_human（发具体拍板请求）/ 任务终态 / 异常才允许结束回合；" +
+  "禁止「继续盯着，有动静随时汇报」式无终止收尾。";
+
+const AFTER_CHAT_OPEN_HINT =
+  "会话已建立：监听主用形态是 chat_wait(session, timeout_ms) 长等下一帧；" +
+  "agent 忙别的时帧进服务端缓冲不丢，回来用 chat_read 排空。" +
+  "持有回合直到闸口 pending_human / 任务终态 / 异常才收尾。";
+
 const TOOLS: ToolDef[] = [
   {
     name: "whoami",
@@ -136,14 +167,15 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: "wo_start",
-    description: "派发工作单到产线节点执行（同步等待网关派发回执；节点离线返回 502 + 接入指引）",
+    description: "派发工作单到产线节点执行（同步等待网关派发回执；节点离线返回 502 + 接入指引）。派发成功后必须进入监听循环持有回合，直到闸口 pending_human / 任务终态 / 异常才允许收尾（返回值 _next 有细则）",
     inputSchema: { type: "object", properties: {
       id: { type: "string" }, mode: { type: "string" }, confirm: { type: "boolean" } }, required: ["id"] },
     run: async (a) => {
       if (a.confirm !== true) return NEED_CONFIRM;
       const body: Record<string, unknown> = { wo: a.id };
       if (a.mode) body.mode = a.mode;
-      return api("POST", "/api/start", { body });
+      const r = await api("POST", "/api/start", { body });
+      return { ...r, _next: AFTER_DISPATCH_HINT };
     },
   },
   {
@@ -188,12 +220,15 @@ const TOOLS: ToolDef[] = [
   // ---------- WS 会话代理（D5：全双工，不降级） ----------
   {
     name: "chat_open",
-    description: "与产线节点建立 chat 会话（真实 WS 长连接，服务端缓冲不丢帧；返回 session 句柄与 sid）",
+    description: "与产线节点建立 chat 会话（真实 WS 长连接，服务端缓冲不丢帧；返回 session 句柄与 sid）。监听主用形态：chat_wait 长等下一帧",
     inputSchema: { type: "object", properties: {
       agent: { type: "string", description: "节点 agent_id" },
       resume: { type: "string", description: "续接历史会话的 sid（可选）" } }, required: ["agent"] },
     read: true,
-    run: async (a) => wsOpen({ agent: String(a.agent), resume: a.resume ? String(a.resume) : undefined }),
+    run: async (a) => {
+      const r = await wsOpen({ agent: String(a.agent), resume: a.resume ? String(a.resume) : undefined });
+      return { ...r, hint: AFTER_CHAT_OPEN_HINT };
+    },
   },
   {
     name: "chat_send",
@@ -211,7 +246,7 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: "chat_wait",
-    description: "长等 chat 会话下一帧（发一句等回复的主用形态）",
+    description: "长等 chat 会话下一帧（监听循环主用形态：事件到达立即返回，无事件干等不耗 token；循环直到闸口 pending_human / 任务终态 / 异常才允许收尾）",
     inputSchema: { type: "object", properties: {
       session: { type: "string" }, timeout_ms: { type: "number", default: 10000 } }, required: ["session"] },
     read: true,
@@ -267,6 +302,7 @@ async function handle(msg: RpcMsg): Promise<void> {
         protocolVersion: params?.protocolVersion || "2024-11-05",
         capabilities: { tools: {}, resources: {} },
         serverInfo: { name: "jixiaops-mcp", version: pkgVersion() },
+        instructions: TURN_DISCIPLINE,
       } });
       return;
     case "notifications/initialized": return;
